@@ -1,0 +1,85 @@
+// Prisma schema for Daddy Game Chicken
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Player {
+  id        String   @id @default(uuid()) @db.Uuid
+  nickname  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions GameSession[]
+
+  @@index([nickname])
+  @@map("players")
+}
+
+model GameSession {
+  id              String   @id @default(uuid()) @db.Uuid
+  playerId        String?  @db.Uuid
+  nickname        String
+  score           Int
+  selectedBranch  String
+  durationSeconds Int
+  caughtItems     Int      @default(0)
+  missedItems     Int      @default(0)
+  livesRemaining  Int      @default(0)
+  clientSessionId String   @unique
+  ipHash          String?
+  createdAt       DateTime @default(now())
+
+  player  Player?  @relation(fields: [playerId], references: [id], onDelete: SetNull)
+  rewards Reward[]
+
+  @@index([score])
+  @@index([createdAt])
+  @@index([playerId])
+  @@index([clientSessionId])
+  @@index([selectedBranch])
+  @@map("game_sessions")
+}
+
+enum RewardStatus {
+  AVAILABLE
+  REDEEMED
+  EXPIRED
+}
+
+model Reward {
+  id                 String       @id @default(uuid()) @db.Uuid
+  gameSessionId      String       @db.Uuid
+  code               String       @unique
+  rewardType         String
+  discountPercentage Int?
+  status             RewardStatus @default(AVAILABLE)
+  expiresAt          DateTime
+  redeemedAt         DateTime?
+  createdAt          DateTime     @default(now())
+
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@index([code])
+  @@index([status])
+  @@index([gameSessionId])
+  @@map("rewards")
+}
+
+model GameConfiguration {
+  id        String   @id @default(uuid()) @db.Uuid
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@map("game_configurations")
+}

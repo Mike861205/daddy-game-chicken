@@ -1,0 +1,42 @@
+{
+  "name": "daddy-game-chicken",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daddy Game Chicken: Atrapa el Sabor - videojuego web 2D para Daddy Pollo",
+  "type": "module",
+  "workspaces": [
+    "game",
+    "server"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "dev": "concurrently -n GAME,SERVER -c cyan,magenta \"npm run dev:game\" \"npm run dev:server\"",
+    "dev:game": "npm run dev --workspace game",
+    "dev:server": "npm run dev --workspace server",
+    "build": "npm run build:server && npm run build:game",
+    "build:game": "npm run build --workspace game",
+    "build:server": "npm run build --workspace server",
+    "lint": "npm run lint --workspace game && npm run lint --workspace server",
+    "typecheck": "npm run typecheck --workspace game && npm run typecheck --workspace server",
+    "test": "npm run test --workspace server",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:studio": "prisma studio"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0",
+    "prisma": "^6.2.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.2.0"
+  }
+}
