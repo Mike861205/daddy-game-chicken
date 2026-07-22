@@ -19,6 +19,7 @@ export interface DeploymentStatus {
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const sshCommand = process.platform === 'win32' ? 'ssh.exe' : 'ssh';
 const MAX_LOG_LINES = 400;
+const ANSI_PATTERN = new RegExp(`${String.fromCodePoint(27)}\\[[0-?]*[ -/]*[@-~]`, 'gu');
 
 let deployment: DeploymentStatus = {
   enabled: env.localDeployEnabled,
@@ -36,6 +37,7 @@ function snapshot(): DeploymentStatus {
 
 function sanitizeLog(value: string): string {
   return value
+    .replace(ANSI_PATTERN, '')
     .replace(/postgres(?:ql)?:\/\/[^@\s]+@/giu, 'postgresql://***@')
     .replace(/(ADMIN_PASSWORD|ADMIN_SESSION_SECRET|REWARD_SECRET)=\S+/giu, '$1=***');
 }
@@ -60,12 +62,13 @@ async function runCommand(
   command: string,
   args: string[],
   allowedExitCodes: number[] = [0],
+  environment: NodeJS.ProcessEnv = {},
 ): Promise<{ code: number; output: string }> {
   appendLog(`$ ${label}`);
   return await new Promise((resolvePromise, reject) => {
     const child = spawn(command, args, {
       cwd: projectRoot,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...environment },
       shell: false,
       windowsHide: true,
     });
@@ -89,15 +92,21 @@ async function runCommand(
   });
 }
 
-async function runNpm(label: string, args: string[]): Promise<{ code: number; output: string }> {
+async function runNpm(
+  label: string,
+  args: string[],
+  environment: NodeJS.ProcessEnv = {},
+): Promise<{ code: number; output: string }> {
   if (process.platform === 'win32') {
     return await runCommand(
       label,
       process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe',
       ['/d', '/s', '/c', 'npm.cmd', ...args],
+      [0],
+      environment,
     );
   }
-  return await runCommand(label, 'npm', args);
+  return await runCommand(label, 'npm', args, [0], environment);
 }
 
 async function executeDeployment(message: string): Promise<void> {
@@ -112,7 +121,10 @@ async function executeDeployment(message: string): Promise<void> {
     setPhase('Ejecutando TypeScript, lint, pruebas y build');
     await runNpm('npm run typecheck', ['run', 'typecheck']);
     await runNpm('npm run lint', ['run', 'lint']);
-    await runNpm('npm test', ['test']);
+    await runNpm('npm test', ['test'], {
+      NODE_ENV: 'test',
+      LOCAL_DEPLOY_ENABLED: 'false',
+    });
     await runNpm('npm run build', ['run', 'build']);
 
     setPhase('Preparando el commit');
