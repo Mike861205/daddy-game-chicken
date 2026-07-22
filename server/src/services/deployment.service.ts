@@ -17,7 +17,6 @@ export interface DeploymentStatus {
 }
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const sshCommand = process.platform === 'win32' ? 'ssh.exe' : 'ssh';
 const MAX_LOG_LINES = 400;
 
@@ -90,6 +89,17 @@ async function runCommand(
   });
 }
 
+async function runNpm(label: string, args: string[]): Promise<{ code: number; output: string }> {
+  if (process.platform === 'win32') {
+    return await runCommand(
+      label,
+      process.env.ComSpec ?? 'C:\\Windows\\System32\\cmd.exe',
+      ['/d', '/s', '/c', 'npm.cmd', ...args],
+    );
+  }
+  return await runCommand(label, 'npm', args);
+}
+
 async function executeDeployment(message: string): Promise<void> {
   try {
     setPhase('Verificando la rama local');
@@ -100,10 +110,10 @@ async function executeDeployment(message: string): Promise<void> {
     await runCommand('git diff --check', 'git', ['diff', '--check']);
 
     setPhase('Ejecutando TypeScript, lint, pruebas y build');
-    await runCommand('npm run typecheck', npmCommand, ['run', 'typecheck']);
-    await runCommand('npm run lint', npmCommand, ['run', 'lint']);
-    await runCommand('npm test', npmCommand, ['test']);
-    await runCommand('npm run build', npmCommand, ['run', 'build']);
+    await runNpm('npm run typecheck', ['run', 'typecheck']);
+    await runNpm('npm run lint', ['run', 'lint']);
+    await runNpm('npm test', ['test']);
+    await runNpm('npm run build', ['run', 'build']);
 
     setPhase('Preparando el commit');
     await runCommand('git add -A', 'git', ['add', '-A']);
