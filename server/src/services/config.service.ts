@@ -11,6 +11,10 @@ export interface PublicConfig {
   durationSeconds: number;
   startingLives: number;
   difficultyLevel: number;
+  campaign: {
+    bossArrivalSeconds: number;
+    worldCount: number;
+  };
   scoring: {
     normalItemPoints: number;
     specialItemPoints: number;
@@ -61,11 +65,16 @@ export async function getPublicConfig(): Promise<PublicConfig> {
   });
   const contact = await readConfig('game.contact', { businessPhone: '6241548148' });
   const difficulty = await readConfig('game.difficulty', { level: 5 });
+  const campaign = await readConfig('game.campaign', { bossArrivalSeconds: 120, worldCount: 5 });
 
   return {
     durationSeconds: duration.durationSeconds,
     startingLives: duration.startingLives,
     difficultyLevel: normalizeDifficulty(difficulty.level),
+    campaign: {
+      bossArrivalSeconds: normalizeBossArrival(campaign.bossArrivalSeconds),
+      worldCount: 5,
+    },
     scoring: {
       normalItemPoints: scoring.normalItemPoints,
       specialItemPoints: scoring.specialItemPoints,
@@ -106,6 +115,7 @@ export async function getAdminGameConfig(): Promise<{
   businessPhone: string;
   rewardExpiryHours: number;
   difficultyLevel: number;
+  bossArrivalSeconds: number;
   tiers: PromotionTier[];
 }> {
   const promotions = await readConfig('game.promotions', {
@@ -114,11 +124,13 @@ export async function getAdminGameConfig(): Promise<{
   });
   const contact = await readConfig('game.contact', { businessPhone: '6241548148' });
   const difficulty = await readConfig('game.difficulty', { level: 5 });
+  const campaign = await readConfig('game.campaign', { bossArrivalSeconds: 120, worldCount: 5 });
 
   return {
     businessPhone: contact.businessPhone,
     rewardExpiryHours: promotions.rewardExpiryHours ?? 168,
     difficultyLevel: normalizeDifficulty(difficulty.level),
+    bossArrivalSeconds: normalizeBossArrival(campaign.bossArrivalSeconds),
     tiers: promotions.tiers,
   };
 }
@@ -137,4 +149,9 @@ export async function getScoreValidationConfig(): Promise<ScoreValidationConfig>
 function normalizeDifficulty(level: unknown): number {
   const numericLevel = typeof level === 'number' && Number.isFinite(level) ? level : 5;
   return Math.max(0, Math.min(10, Math.round(numericLevel)));
+}
+
+function normalizeBossArrival(seconds: unknown): number {
+  const numericSeconds = typeof seconds === 'number' && Number.isFinite(seconds) ? seconds : 120;
+  return Math.max(30, Math.min(600, Math.round(numericSeconds)));
 }

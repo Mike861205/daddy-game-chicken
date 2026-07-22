@@ -19,10 +19,10 @@ export const createGameSessionSchema = z.object({
   name: z.string().trim().max(40, 'El nombre es demasiado largo.').optional(),
   score: z.number().int().min(0, 'El puntaje no puede ser negativo.').max(1_000_000),
   selectedBranch: z.enum(BRANCH_IDS),
-  durationSeconds: z.number().int().min(1).max(120),
+  durationSeconds: z.number().int().min(1).max(7200),
   caughtItems: z.number().int().min(0).max(10_000).default(0),
   missedItems: z.number().int().min(0).max(10_000).default(0),
-  livesRemaining: z.number().int().min(0).max(3).default(0),
+  livesRemaining: z.number().int().min(0).max(5).default(0),
   clientSessionId: z.string().uuid('clientSessionId debe ser un UUID válido.'),
   phone: z
     .string()

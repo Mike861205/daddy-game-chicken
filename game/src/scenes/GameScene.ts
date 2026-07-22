@@ -19,6 +19,8 @@ import {
 } from '../config/items.js';
 import { ENEMIES, ENEMY_ORDER, type EnemyType } from '../config/enemies.js';
 import { WEAPONS } from '../config/weapons.js';
+import { WORLDS, type WorldDefinition } from '../config/worlds.js';
+import { Boss } from '../objects/Boss.js';
 import { Enemy } from '../objects/Enemy.js';
 import { FallingItem } from '../objects/FallingItem.js';
 import { Player } from '../objects/Player.js';
@@ -32,6 +34,8 @@ export class GameScene extends Phaser.Scene {
   private projectiles!: Phaser.Physics.Arcade.Group;
   private enemies!: Phaser.Physics.Arcade.Group;
   private enemyProjectiles!: Phaser.Physics.Arcade.Group;
+  private bossProjectiles!: Phaser.Physics.Arcade.Group;
+  private boss!: Boss;
   private config!: PublicConfig;
 
   private score = 0;
@@ -42,6 +46,12 @@ export class GameScene extends Phaser.Scene {
   private missedItems = 0;
   private paused = false;
   private gameOver = false;
+  private bossActive = false;
+  private worldTransitioning = false;
+  private currentWorldIndex = 0;
+  private worldPaceStage = 0;
+  private campaignElapsedSeconds = 0;
+  private bossProjectileIndex = 0;
 
   private baseFallSpeed = 220;
   private spawnDelay = 850;
@@ -75,7 +85,13 @@ export class GameScene extends Phaser.Scene {
   private powerText!: Phaser.GameObjects.Text;
   private weaponText!: Phaser.GameObjects.Text;
   private coverText!: Phaser.GameObjects.Text;
+  private worldText!: Phaser.GameObjects.Text;
+  private bossNameText!: Phaser.GameObjects.Text;
+  private bossHealthBg!: Phaser.GameObjects.Rectangle;
+  private bossHealthFill!: Phaser.GameObjects.Rectangle;
   private equippedWeaponSprite?: Phaser.GameObjects.Image;
+  private backgroundImage?: Phaser.GameObjects.Image;
+  private worldColorOverlay?: Phaser.GameObjects.Rectangle;
 
   // Timers.
   private spawnTimer?: Phaser.Time.TimerEvent;
@@ -96,8 +112,13 @@ export class GameScene extends Phaser.Scene {
   private leftPressed = false;
   private rightPressed = false;
   private dragging = false;
+  private dragPointerId: number | null = null;
   private firePressed = false;
   private coverPressed = false;
+  private readonly leftTouchPointers = new Set<number>();
+  private readonly rightTouchPointers = new Set<number>();
+  private readonly fireTouchPointers = new Set<number>();
+  private readonly coverTouchPointers = new Set<number>();
 
   private visibilityHandler?: () => void;
 
@@ -109,7 +130,8 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
     this.config = this.registry.get(REGISTRY.publicConfig) as PublicConfig;
     this.applyDifficultySettings(this.config.difficultyLevel);
-    this.timeLeft = this.config.durationSeconds;
+    this.refreshWorldPace();
+    this.timeLeft = this.getBossArrivalSeconds();
     const livesAdjustment = this.difficultyLevel <= 1 ? 1 : this.difficultyLevel === 10 ? -1 : 0;
     this.lives = Math.max(1, this.config.startingLives + livesAdjustment);
 
@@ -119,7 +141,9 @@ export class GameScene extends Phaser.Scene {
     this.createItemsGroup();
     this.createProjectilesGroup();
     this.createEnemiesSystem();
+    this.createBossSystem();
     this.createHud();
+    this.equipStartingWeapon();
     this.createTouchControls();
     this.createKeyboardControls();
     this.createPauseButton();
@@ -140,6 +164,12 @@ export class GameScene extends Phaser.Scene {
     this.missedItems = 0;
     this.paused = false;
     this.gameOver = false;
+    this.bossActive = false;
+    this.worldTransitioning = false;
+    this.currentWorldIndex = 0;
+    this.worldPaceStage = 0;
+    this.campaignElapsedSeconds = 0;
+    this.bossProjectileIndex = 0;
     this.activePowers.clear();
     this.activeWeapon = null;
     this.weaponAmmo = 0;
@@ -155,8 +185,22 @@ export class GameScene extends Phaser.Scene {
     this.leftPressed = false;
     this.rightPressed = false;
     this.dragging = false;
+    this.dragPointerId = null;
     this.firePressed = false;
     this.coverPressed = false;
+    this.leftTouchPointers.clear();
+    this.rightTouchPointers.clear();
+    this.fireTouchPointers.clear();
+    this.coverTouchPointers.clear();
+  }
+
+  private getBossArrivalSeconds(): number {
+    const configured = this.config?.campaign?.bossArrivalSeconds ?? 120;
+    return Phaser.Math.Clamp(Math.round(configured), 30, 600);
+  }
+
+  private get currentWorld(): WorldDefinition {
+    return WORLDS[Math.min(this.currentWorldIndex, WORLDS.length - 1)];
   }
 
   private applyDifficultySettings(rawLevel: number): void {
@@ -177,6 +221,19 @@ export class GameScene extends Phaser.Scene {
     return Math.max(5, Math.round((points * this.difficultyScoreMultiplier) / 5) * 5);
   }
 
+  private refreshWorldPace(): void {
+    const offset = (this.difficultyLevel - 5) / 5;
+    const worldBoost = this.currentWorldIndex * 0.075;
+    const stageBoost = this.worldPaceStage * 0.1;
+    this.baseFallSpeed = Math.round(
+      220 * this.difficultySpeedMultiplier * (1 + worldBoost + stageBoost),
+    );
+    this.spawnDelay = Math.max(
+      420,
+      Math.round(850 * (1 - 0.24 * offset) * (1 - worldBoost * 0.5 - stageBoost * 0.55)),
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Setup
   // ---------------------------------------------------------------------------
@@ -186,12 +243,18 @@ export class GameScene extends Phaser.Scene {
     bg.fillGradientStyle(0x1e63d0, 0x1e63d0, COLORS.blue, COLORS.blue, 1);
     bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-    if (this.textures.exists('fondo-los-cabos')) {
-      this.add
-        .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'fondo-los-cabos')
-        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
-        .setAlpha(0.3);
-    }
+    const firstBackground = this.textures.exists(this.currentWorld.backgroundKey)
+      ? this.currentWorld.backgroundKey
+      : 'fondo-los-cabos';
+    this.backgroundImage = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, firstBackground)
+      .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+      .setAlpha(0.72)
+      .setDepth(0);
+    this.worldColorOverlay = this.add
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, this.currentWorld.color, 0.055)
+      .setOrigin(0)
+      .setDepth(0.5);
 
     // Slow glints give the arena depth without competing with the pickups.
     const ambience = this.add.particles(0, 0, '__WHITE', {
@@ -212,6 +275,33 @@ export class GameScene extends Phaser.Scene {
     const ground = this.add.graphics();
     ground.fillStyle(COLORS.yellow, 1);
     ground.fillRect(0, GAME_HEIGHT - 130, GAME_WIDTH, 8);
+  }
+
+  private transitionWorldBackground(world: WorldDefinition): void {
+    if (!this.backgroundImage || !this.textures.exists(world.backgroundKey)) {
+      return;
+    }
+    const incoming = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, world.backgroundKey)
+      .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
+      .setAlpha(0)
+      .setDepth(0);
+    const outgoing = this.backgroundImage;
+    this.backgroundImage = incoming;
+    this.worldColorOverlay?.setFillStyle(world.color, 0.055);
+    this.tweens.add({
+      targets: incoming,
+      alpha: 0.72,
+      duration: 950,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: outgoing,
+      alpha: 0,
+      duration: 950,
+      ease: 'Sine.inOut',
+      onComplete: () => outgoing.destroy(),
+    });
   }
 
   private createPlayer(): void {
@@ -372,6 +462,41 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
+  private createBossSystem(): void {
+    this.boss = new Boss(this, GAME_WIDTH / 2, -180);
+    this.bossProjectiles = this.physics.add.group({
+      maxSize: 90,
+      runChildUpdate: false,
+    });
+
+    this.physics.add.overlap(
+      this.projectiles,
+      this.boss,
+      (projectileObj, bossObj) => {
+        const projectile = projectileObj as Phaser.Physics.Arcade.Image;
+        const boss = bossObj as Boss;
+        if (projectile.active && boss.active && this.bossActive) {
+          this.onProjectileHitBoss(projectile, boss);
+        }
+      },
+      undefined,
+      this,
+    );
+
+    this.physics.add.overlap(
+      this.player,
+      this.bossProjectiles,
+      (_playerObj, projectileObj) => {
+        const projectile = projectileObj as Phaser.Physics.Arcade.Image;
+        if (projectile.active) {
+          this.onEnemyProjectileHit(projectile);
+        }
+      },
+      undefined,
+      this,
+    );
+  }
+
   private createHud(): void {
     const style = {
       fontFamily: 'Arial Black, sans-serif',
@@ -387,6 +512,14 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(1, 0)
       .setDepth(20);
     this.livesText = this.add.text(24, 72, '❤️❤️❤️', { ...style, fontSize: '32px' }).setDepth(20);
+    this.worldText = this.add
+      .text(GAME_WIDTH / 2, 32, '', {
+        ...style,
+        fontSize: '19px',
+        color: this.currentWorld.colorHex,
+      })
+      .setOrigin(0.5, 0)
+      .setDepth(21);
     this.comboText = this.add
       .text(GAME_WIDTH / 2, 130, '', { ...style, fontSize: '30px', color: COLORS_HEX.neon })
       .setOrigin(0.5)
@@ -411,6 +544,26 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setDepth(20);
+
+    this.bossNameText = this.add
+      .text(GAME_WIDTH / 2, 108, '', {
+        ...style,
+        fontSize: '25px',
+        color: COLORS_HEX.red,
+      })
+      .setOrigin(0.5)
+      .setDepth(25)
+      .setVisible(false);
+    this.bossHealthBg = this.add
+      .rectangle(GAME_WIDTH / 2, 151, 488, 25, 0x020718, 0.9)
+      .setStrokeStyle(3, COLORS.white, 0.85)
+      .setDepth(24)
+      .setVisible(false);
+    this.bossHealthFill = this.add
+      .rectangle(GAME_WIDTH / 2 - 236, 151, 472, 13, this.currentWorld.color, 1)
+      .setOrigin(0, 0.5)
+      .setDepth(25)
+      .setVisible(false);
 
     this.updateHud();
   }
@@ -437,39 +590,80 @@ export class GameScene extends Phaser.Scene {
     const coverBtn = this.makeCoverButton(238, btnY);
     const fireBtn = this.makeFireButton(482, btnY);
 
-    leftBtn.on('pointerdown', () => (this.leftPressed = true));
-    leftBtn.on('pointerup', () => (this.leftPressed = false));
-    leftBtn.on('pointerout', () => (this.leftPressed = false));
-    rightBtn.on('pointerdown', () => (this.rightPressed = true));
-    rightBtn.on('pointerup', () => (this.rightPressed = false));
-    rightBtn.on('pointerout', () => (this.rightPressed = false));
-    fireBtn.on('pointerdown', () => {
-      this.firePressed = true;
-      this.tryFireWeapon();
-    });
-    fireBtn.on('pointerup', () => (this.firePressed = false));
-    fireBtn.on('pointerout', () => (this.firePressed = false));
-    coverBtn.on('pointerdown', () => (this.coverPressed = true));
-    coverBtn.on('pointerup', () => (this.coverPressed = false));
-    coverBtn.on('pointerout', () => (this.coverPressed = false));
+    this.bindHoldControl(leftBtn, this.leftTouchPointers);
+    this.bindHoldControl(rightBtn, this.rightTouchPointers);
+    this.bindHoldControl(fireBtn, this.fireTouchPointers, () => this.tryFireWeapon());
+    this.bindHoldControl(coverBtn, this.coverTouchPointers);
 
-    // Drag anywhere in the play area to move the player.
-    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.isDown && pointer.y < GAME_HEIGHT - 160) {
+    // Tap or drag anywhere in the play area to move the player. Tracking one
+    // pointer keeps a second finger on FIRE/COVER from cancelling movement.
+    this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.y < GAME_HEIGHT - 175 && this.dragPointerId === null) {
         this.dragging = true;
+        this.dragPointerId = pointer.id;
         this.player.moveToward(pointer.x);
       }
     });
-    this.input.on('pointerup', () => {
-      if (this.dragging) {
+    this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.isDown && pointer.id === this.dragPointerId) {
+        this.player.moveToward(pointer.x);
+      }
+    });
+    this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      this.releaseTouchPointer(pointer.id);
+      if (pointer.id === this.dragPointerId) {
         this.dragging = false;
+        this.dragPointerId = null;
         this.player.clearTarget();
       }
     });
+    this.input.on('gameout', () => this.clearTouchControls());
+  }
+
+  private bindHoldControl(
+    button: Phaser.GameObjects.Container,
+    pointers: Set<number>,
+    onPress?: () => void,
+  ): void {
+    button.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      pointers.add(pointer.id);
+      button.setScale(0.92);
+      onPress?.();
+      this.triggerControlHaptic();
+    });
+    button.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      pointers.delete(pointer.id);
+      if (pointers.size === 0) button.setScale(1);
+    });
+    button.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+      pointers.delete(pointer.id);
+      if (pointers.size === 0) button.setScale(1);
+    });
+  }
+
+  private releaseTouchPointer(pointerId: number): void {
+    this.leftTouchPointers.delete(pointerId);
+    this.rightTouchPointers.delete(pointerId);
+    this.fireTouchPointers.delete(pointerId);
+    this.coverTouchPointers.delete(pointerId);
+  }
+
+  private clearTouchControls(): void {
+    this.leftTouchPointers.clear();
+    this.rightTouchPointers.clear();
+    this.fireTouchPointers.clear();
+    this.coverTouchPointers.clear();
+    this.leftPressed = false;
+    this.rightPressed = false;
+    this.firePressed = false;
+    this.coverPressed = false;
+    this.dragging = false;
+    this.dragPointerId = null;
+    this.player?.clearTarget();
   }
 
   private makeControlButton(x: number, y: number, symbol: string): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y).setDepth(30);
+    const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const g = this.add.graphics();
     g.fillStyle(COLORS.yellow, 0.85);
     g.fillCircle(0, 0, 60);
@@ -479,16 +673,16 @@ export class GameScene extends Phaser.Scene {
       .text(0, 0, symbol, { fontFamily: 'Arial Black', fontSize: '48px', color: COLORS_HEX.blue })
       .setOrigin(0.5);
     container.add([g, text]);
-    container.setSize(120, 120);
+    container.setSize(156, 156);
     container.setInteractive(
-      new Phaser.Geom.Circle(0, 0, 60),
+      new Phaser.Geom.Circle(0, 0, 78),
       Phaser.Geom.Circle.Contains,
     );
     return container;
   }
 
   private makeFireButton(x: number, y: number): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y).setDepth(30);
+    const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const glow = this.add.circle(0, 0, 68, COLORS.red, 0.2);
     const button = this.add
       .circle(0, 0, 57, COLORS.red, 0.94)
@@ -512,8 +706,8 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     container.add([glow, button, icon, label]);
-    container.setSize(136, 136);
-    container.setInteractive(new Phaser.Geom.Circle(0, 0, 68), Phaser.Geom.Circle.Contains);
+    container.setSize(156, 156);
+    container.setInteractive(new Phaser.Geom.Circle(0, 0, 78), Phaser.Geom.Circle.Contains);
 
     this.tweens.add({
       targets: glow,
@@ -530,7 +724,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private makeCoverButton(x: number, y: number): Phaser.GameObjects.Container {
-    const container = this.add.container(x, y).setDepth(30);
+    const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const glow = this.add.circle(0, 0, 61, 0x43d9ff, 0.2);
     const button = this.add
       .circle(0, 0, 53, COLORS.blueLight, 0.95)
@@ -554,8 +748,8 @@ export class GameScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     container.add([glow, button, icon, label]);
-    container.setSize(122, 122);
-    container.setInteractive(new Phaser.Geom.Circle(0, 0, 61), Phaser.Geom.Circle.Contains);
+    container.setSize(152, 152);
+    container.setInteractive(new Phaser.Geom.Circle(0, 0, 76), Phaser.Geom.Circle.Contains);
     container.on('pointerdown', () => container.setScale(0.94));
     container.on('pointerup', () => container.setScale(1));
     container.on('pointerout', () => container.setScale(1));
@@ -593,11 +787,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startTimers(): void {
-    this.spawnTimer = this.time.addEvent({
-      delay: this.spawnDelay,
-      loop: true,
-      callback: () => this.spawnItem(),
-    });
+    this.startWorldTimers();
 
     this.countdownTimer = this.time.addEvent({
       delay: 1000,
@@ -605,13 +795,22 @@ export class GameScene extends Phaser.Scene {
       callback: () => this.onTick(),
     });
 
-    // Arsenal drops are independent from food spawns, making every weapon
-    // available during a normal 60-second round.
+    // Arsenal drops continue during boss battles so the player can always
+    // finish the fight even after exhausting the starting blaster.
     this.firstWeaponTimer = this.time.delayedCall(3200, () => this.spawnWeaponPickup());
     this.weaponTimer = this.time.addEvent({
       delay: 12000,
       loop: true,
       callback: () => this.spawnWeaponPickup(),
+    });
+  }
+
+  private startWorldTimers(): void {
+    this.stopWorldTimers();
+    this.spawnTimer = this.time.addEvent({
+      delay: this.spawnDelay,
+      loop: true,
+      callback: () => this.spawnItem(),
     });
     this.firstEnemyTimer = this.time.delayedCall(this.firstEnemyDelay, () => this.spawnEnemy());
     this.enemyTimer = this.time.addEvent({
@@ -621,15 +820,30 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private stopWorldTimers(): void {
+    this.spawnTimer?.remove();
+    this.firstEnemyTimer?.remove();
+    this.enemyTimer?.remove();
+    this.spawnTimer = undefined;
+    this.firstEnemyTimer = undefined;
+    this.enemyTimer = undefined;
+  }
+
   private showCountdownStart(): void {
     const label = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '¡LISTO!', {
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        `MUNDO 1\n${this.currentWorld.name.toUpperCase()}\n¡LISTO!`,
+        {
         fontFamily: 'Arial Black',
-        fontSize: '90px',
-        color: COLORS_HEX.yellow,
+        fontSize: '56px',
+        color: this.currentWorld.colorHex,
         stroke: '#000000',
         strokeThickness: 8,
-      })
+        align: 'center',
+        },
+      )
       .setOrigin(0.5)
       .setDepth(50);
     this.tweens.add({
@@ -651,9 +865,9 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Keyboard / touch movement.
-    const left = this.leftPressed || this.cursors?.left.isDown || this.keyA?.isDown;
-    const right = this.rightPressed || this.cursors?.right.isDown || this.keyD?.isDown;
-    const wantsCover = Boolean(this.coverPressed || this.keyS?.isDown || this.keyShift?.isDown);
+    const left = this.leftPressed || this.leftTouchPointers.size > 0 || this.cursors?.left.isDown || this.keyA?.isDown;
+    const right = this.rightPressed || this.rightTouchPointers.size > 0 || this.cursors?.right.isDown || this.keyD?.isDown;
+    const wantsCover = Boolean(this.coverPressed || this.coverTouchPointers.size > 0 || this.keyS?.isDown || this.keyShift?.isDown);
     this.updateCover(wantsCover, delta);
 
     if (this.player.isCovering()) {
@@ -669,7 +883,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.player.update();
 
-    const wantsToFire = this.firePressed || this.keySpace?.isDown || this.keyF?.isDown;
+    const wantsToFire = this.firePressed || this.fireTouchPointers.size > 0 || this.keySpace?.isDown || this.keyF?.isDown;
     if (wantsToFire && !this.player.isCovering()) {
       this.tryFireWeapon();
     }
@@ -710,6 +924,13 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    if (this.bossActive && this.boss.active) {
+      const bossUpdate = this.boss.updateBoss(this.time.now, this.difficultySpeedMultiplier);
+      if (bossUpdate.shouldAttack) {
+        this.spawnBossAttack(bossUpdate.phase);
+      }
+    }
+
     this.projectiles.children.each((child) => {
       const projectile = child as Phaser.Physics.Arcade.Image;
       if (
@@ -732,11 +953,39 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    this.bossProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (!projectile.active) {
+        return true;
+      }
+      const curve = Number(projectile.getData('curve') ?? 0);
+      const body = projectile.body as Phaser.Physics.Arcade.Body;
+      if (curve !== 0) {
+        body.velocity.x += curve * (delta / 1000);
+      }
+      if (
+        projectile.y > GAME_HEIGHT - 104 ||
+        projectile.x < -90 ||
+        projectile.x > GAME_WIDTH + 90
+      ) {
+        this.recycleEnemyProjectile(projectile);
+      }
+      return true;
+    });
+
     this.updatePowersExpiry();
   }
 
   private onTick(): void {
     if (this.paused || this.gameOver) {
+      return;
+    }
+    this.campaignElapsedSeconds += 1;
+    if (this.bossActive) {
+      this.timeText.setText('JEFE').setColor(this.currentWorld.colorHex);
+      return;
+    }
+    if (this.worldTransitioning) {
       return;
     }
     this.timeLeft -= 1;
@@ -748,21 +997,291 @@ export class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: this.timeText, scale: 1.3, duration: 120, yoyo: true });
     }
 
-    // Gradually increase difficulty.
-    if (this.timeLeft === 40 || this.timeLeft === 20) {
-      this.baseFallSpeed += 60;
-      this.spawnDelay = Math.max(450, this.spawnDelay - 150);
-      this.spawnTimer?.remove();
-      this.spawnTimer = this.time.addEvent({
-        delay: this.spawnDelay,
-        loop: true,
-        callback: () => this.spawnItem(),
-      });
+    const worldDuration = this.getBossArrivalSeconds();
+    const nextStage = this.timeLeft <= worldDuration / 3
+      ? 2
+      : this.timeLeft <= (worldDuration * 2) / 3
+        ? 1
+        : 0;
+    if (nextStage > this.worldPaceStage) {
+      this.worldPaceStage = nextStage;
+      this.refreshWorldPace();
+      this.startWorldTimers();
     }
 
     if (this.timeLeft <= 0) {
-      this.endGame();
+      this.startBossBattle();
     }
+  }
+
+  private startBossBattle(): void {
+    if (this.bossActive || this.worldTransitioning || this.gameOver) {
+      return;
+    }
+    this.bossActive = true;
+    this.stopWorldTimers();
+    this.clearArenaForBoss();
+    this.timeText.setText('JEFE').setColor(this.currentWorld.colorHex);
+    this.comboText.setVisible(false);
+    this.powerText.setVisible(false);
+    this.bossNameText
+      .setText(`⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠`)
+      .setColor(this.currentWorld.colorHex)
+      .setVisible(true);
+    this.bossHealthBg.setVisible(true);
+    this.bossHealthFill
+      .setFillStyle(this.currentWorld.color, 1)
+      .setScale(1, 1)
+      .setVisible(true);
+
+    this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel);
+    this.cameras.main.flash(380, 255, 45, 55);
+    this.cameras.main.shake(520, 0.012);
+    audioManager.play('blast');
+
+    const warning = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, `¡GRAN JEFE!\n${this.currentWorld.bossName}`, {
+        fontFamily: 'Arial Black',
+        fontSize: '58px',
+        color: this.currentWorld.colorHex,
+        stroke: '#020718',
+        strokeThickness: 10,
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(70);
+    this.tweens.add({
+      targets: warning,
+      scale: { from: 0.25, to: 1.08 },
+      alpha: { from: 1, to: 0 },
+      duration: 1450,
+      hold: 400,
+      ease: 'Back.out',
+      onComplete: () => warning.destroy(),
+    });
+    this.tweens.add({
+      targets: this.boss,
+      y: 325,
+      duration: 1350,
+      ease: 'Back.out',
+    });
+  }
+
+  private clearArenaForBoss(): void {
+    this.items.children.each((child) => {
+      const item = child as FallingItem;
+      if (item.active) item.recycle();
+      return true;
+    });
+    this.enemies.children.each((child) => {
+      const enemy = child as Enemy;
+      if (enemy.active) enemy.recycle();
+      return true;
+    });
+    this.enemyProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) this.recycleEnemyProjectile(projectile);
+      return true;
+    });
+  }
+
+  private spawnBossAttack(phase: number): void {
+    const world = this.currentWorld;
+    const count = Math.min(7, 1 + world.id + (phase >= 2 ? 1 : 0));
+    const baseAngle = Phaser.Math.Angle.Between(
+      this.boss.x,
+      this.boss.y + 35,
+      this.player.x,
+      this.player.y - 45,
+    );
+    const spread = world.id === 1 ? 0.55 : 0.82 + world.id * 0.08;
+    for (let index = 0; index < count; index += 1) {
+      const offset = count === 1 ? 0 : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
+      this.spawnBossProjectile(baseAngle + offset, phase, index);
+    }
+    this.emitMuzzleFlash(this.boss.x, this.boss.y + 60, world.color);
+    this.tweens.add({
+      targets: this.boss,
+      scaleX: this.boss.scaleX * 1.08,
+      scaleY: this.boss.scaleY * 0.94,
+      duration: 90,
+      yoyo: true,
+    });
+    audioManager.play(world.id === 2 ? 'blast' : 'enemy');
+  }
+
+  private spawnBossProjectile(angle: number, phase: number, patternIndex: number): void {
+    const world = this.currentWorld;
+    const useMaliciousIcon = (this.bossProjectileIndex + patternIndex) % 3 !== 2;
+    const texture = useMaliciousIcon
+      ? BAD_ITEMS[(this.bossProjectileIndex + patternIndex) % BAD_ITEMS.length].key
+      : world.projectileTexture;
+    this.bossProjectileIndex += 1;
+    const projectile = this.bossProjectiles.get(
+      this.boss.x,
+      this.boss.y + 60,
+      texture,
+    ) as Phaser.Physics.Arcade.Image | null;
+    if (!projectile) {
+      return;
+    }
+
+    const size = useMaliciousIcon ? 48 + world.id * 2 : 42 + world.id * 2;
+    projectile
+      .setTexture(texture)
+      .setActive(true)
+      .setVisible(true)
+      .setPosition(this.boss.x, this.boss.y + 60)
+      .setDisplaySize(size, size)
+      .setDepth(18)
+      .setAlpha(1)
+      .setTint(useMaliciousIcon ? 0xff647c : 0xffffff)
+      .setData('bossProjectile', true)
+      .setData('bossName', world.bossName)
+      .setData('curve', world.id >= 4 ? (patternIndex % 2 === 0 ? 34 : -34) : 0);
+    const body = projectile.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    body.reset(projectile.x, projectile.y);
+    body.setAllowGravity(false);
+    body.setCircle(projectile.width * 0.37);
+    const speed = world.projectileSpeed * this.difficultySpeedMultiplier * (1 + (phase - 1) * 0.1);
+    body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    projectile.setAngularVelocity((patternIndex % 2 === 0 ? 1 : -1) * (150 + world.id * 35));
+  }
+
+  private onProjectileHitBoss(projectile: Phaser.Physics.Arcade.Image, boss: Boss): void {
+    const weaponType = projectile.getData('weapon') as WeaponType;
+    const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
+    this.recycleProjectile(projectile);
+    const defeated = boss.takeHit(damage);
+    this.bossHealthFill.setScale(boss.healthRatio, 1);
+    this.emitSparkle(boss.x, boss.y, WEAPONS[weaponType].color);
+    audioManager.play('shot');
+    if (defeated) {
+      this.defeatBoss();
+    }
+  }
+
+  private defeatBoss(): void {
+    if (!this.bossActive) {
+      return;
+    }
+    const defeatedWorld = this.currentWorld;
+    this.bossActive = false;
+    this.worldTransitioning = true;
+    this.bossHealthFill.setScale(0, 1);
+    this.bossNameText.setText('¡JEFE DERROTADO!').setColor(COLORS_HEX.yellow);
+    const bossBody = this.boss.body as Phaser.Physics.Arcade.Body;
+    bossBody.enable = false;
+    this.boss.setActive(false);
+    this.bossProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) this.recycleEnemyProjectile(projectile);
+      return true;
+    });
+
+    const awardedPoints = this.adjustPointsForDifficulty(defeatedWorld.bossPoints);
+    this.score += awardedPoints;
+    this.updateHud();
+    this.showFloatingText(this.boss.x, this.boss.y, `+${awardedPoints} • JEFE`, COLORS_HEX.yellow);
+    this.emitShockwave(this.boss.x, this.boss.y, 240, defeatedWorld.color);
+    this.cameras.main.shake(650, 0.022);
+    this.cameras.main.flash(420, 255, 210, 30);
+    audioManager.play('combo');
+
+    this.tweens.add({
+      targets: this.boss,
+      alpha: 0,
+      angle: 24,
+      scaleX: this.boss.scaleX * 1.45,
+      scaleY: this.boss.scaleY * 1.45,
+      duration: 780,
+      ease: 'Cubic.in',
+      onComplete: () => this.boss.recycle(),
+    });
+
+    if (this.currentWorldIndex >= WORLDS.length - 1) {
+      this.time.delayedCall(1850, () => this.finishCampaign());
+    } else {
+      this.time.delayedCall(1900, () => this.advanceToNextWorld());
+    }
+  }
+
+  private advanceToNextWorld(): void {
+    this.currentWorldIndex += 1;
+    this.worldPaceStage = 0;
+    this.timeLeft = this.getBossArrivalSeconds();
+    this.refreshWorldPace();
+    this.transitionWorldBackground(this.currentWorld);
+    this.bossNameText.setVisible(false);
+    this.bossHealthBg.setVisible(false);
+    this.bossHealthFill.setVisible(false);
+    this.comboText.setVisible(true);
+    this.powerText.setVisible(true);
+    this.timeText.setText(String(this.timeLeft)).setColor(COLORS_HEX.yellow);
+    this.lives = Math.min(this.config.startingLives, this.lives + 1);
+    if (this.activeWeapon) {
+      this.weaponAmmo = Math.max(this.weaponAmmo, WEAPONS[this.activeWeapon].ammo);
+    } else {
+      this.equipStartingWeapon();
+    }
+    this.updateHud();
+
+    const worldIntro = this.add
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        `MUNDO ${this.currentWorld.id}\n${this.currentWorld.name.toUpperCase()}\n${this.currentWorld.subtitle}`,
+        {
+          fontFamily: 'Arial Black',
+          fontSize: '52px',
+          color: this.currentWorld.colorHex,
+          stroke: '#020718',
+          strokeThickness: 9,
+          align: 'center',
+        },
+      )
+      .setOrigin(0.5)
+      .setDepth(70);
+    this.tweens.add({
+      targets: worldIntro,
+      y: GAME_HEIGHT / 2 - 40,
+      alpha: { from: 0, to: 1 },
+      scale: { from: 0.72, to: 1 },
+      duration: 620,
+      yoyo: true,
+      hold: 720,
+      onComplete: () => {
+        worldIntro.destroy();
+        this.worldTransitioning = false;
+        this.startWorldTimers();
+        this.spawnWeaponPickup();
+      },
+    });
+  }
+
+  private finishCampaign(): void {
+    const finale = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '¡CAMPAÑA COMPLETA!\nVENCISTE A LOS 5 JEFES', {
+        fontFamily: 'Arial Black',
+        fontSize: '55px',
+        color: COLORS_HEX.yellow,
+        stroke: '#020718',
+        strokeThickness: 10,
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(80);
+    this.tweens.add({
+      targets: finale,
+      scale: { from: 0.4, to: 1.05 },
+      duration: 650,
+      ease: 'Back.out',
+    });
+    this.time.delayedCall(1700, () => {
+      finale.destroy();
+      this.endGame();
+    });
   }
 
   // ---------------------------------------------------------------------------
@@ -770,7 +1289,7 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private spawnItem(): void {
-    if (this.paused || this.gameOver) {
+    if (this.paused || this.gameOver || this.bossActive || this.worldTransitioning) {
       return;
     }
     const definition = this.pickItem();
@@ -778,7 +1297,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnWeaponPickup(): void {
-    if (this.paused || this.gameOver) {
+    if (this.paused || this.gameOver || this.worldTransitioning) {
       return;
     }
     const definition = WEAPON_ITEMS[this.nextWeaponIndex % WEAPON_ITEMS.length];
@@ -820,7 +1339,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private spawnEnemy(): void {
-    if (this.paused || this.gameOver || this.enemies.countActive(true) >= this.maxActiveEnemies) {
+    if (
+      this.paused ||
+      this.gameOver ||
+      this.bossActive ||
+      this.worldTransitioning ||
+      this.enemies.countActive(true) >= this.maxActiveEnemies
+    ) {
       return;
     }
     const orderIndex = this.nextEnemyIndex % ENEMY_ORDER.length;
@@ -963,6 +1488,42 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private equipStartingWeapon(): void {
+    const definition = WEAPONS.modern;
+    this.activeWeapon = 'modern';
+    this.weaponAmmo = definition.ammo;
+    this.nextShotAt = 0;
+    // The modern blaster is already equipped, so the first falling weapon is
+    // the historic cannon instead of a duplicate pickup.
+    this.nextWeaponIndex = 1;
+    this.equippedWeaponSprite?.destroy();
+    this.equippedWeaponSprite = this.add
+      .image(this.player.x + 42, this.player.y - 70, definition.textureKey)
+      .setDisplaySize(74, 74)
+      .setDepth(9);
+    this.updateHud();
+
+    const hint = this.add
+      .text(GAME_WIDTH / 2, 318, 'BLÁSTER LISTO  •  MANTÉN FUEGO', {
+        fontFamily: 'Arial Black',
+        fontSize: '21px',
+        color: definition.colorHex,
+        stroke: '#020718',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(44);
+    this.tweens.add({
+      targets: hint,
+      y: 294,
+      alpha: { from: 1, to: 0 },
+      duration: 1800,
+      hold: 800,
+      ease: 'Cubic.out',
+      onComplete: () => hint.destroy(),
+    });
+  }
+
   private handleWeaponCatch(weapon: WeaponType, x: number, y: number): void {
     const definition = WEAPONS[weapon];
     this.activeWeapon = weapon;
@@ -1095,12 +1656,18 @@ export class GameScene extends Phaser.Scene {
   private onEnemyProjectileHit(projectile: Phaser.Physics.Arcade.Image): void {
     const x = projectile.x;
     const y = projectile.y;
-    const type = projectile.getData('enemyType') as EnemyType;
+    const type = projectile.getData('enemyType') as EnemyType | undefined;
+    const bossProjectile = Boolean(projectile.getData('bossProjectile'));
+    const attackerName = bossProjectile
+      ? String(projectile.getData('bossName') ?? 'GRAN JEFE')
+      : type
+        ? ENEMIES[type].label
+        : 'RIVAL';
     this.recycleEnemyProjectile(projectile);
 
     if (this.isPowerActive('shield') || this.player.isCovering()) {
       if (!this.isPowerActive('shield')) {
-        this.coverEnergy = Math.max(0, this.coverEnergy - 16);
+        this.coverEnergy = Math.max(0, this.coverEnergy - (bossProjectile ? 24 : 16));
         this.coverRechargeAt = this.time.now + 1100;
         if (this.coverEnergy <= 0) {
           this.coverBroken = true;
@@ -1124,7 +1691,7 @@ export class GameScene extends Phaser.Scene {
     this.showFloatingText(
       this.player.x,
       this.player.y - 105,
-      `-${ENEMIES[type].label} • 1 VIDA`,
+      `-${attackerName} • 1 VIDA`,
       COLORS_HEX.red,
     );
     this.cameras.main.shake(220, 0.014);
@@ -1203,7 +1770,8 @@ export class GameScene extends Phaser.Scene {
   private recycleEnemyProjectile(projectile: Phaser.Physics.Arcade.Image): void {
     projectile.setAngularVelocity(0);
     projectile.disableBody(true, true);
-    projectile.setActive(false).setVisible(false);
+    projectile.setActive(false).setVisible(false).clearTint();
+    projectile.setData('bossProjectile', false).setData('curve', 0);
   }
 
   private tryFireWeapon(): void {
@@ -1454,6 +2022,9 @@ export class GameScene extends Phaser.Scene {
     this.scoreText.setText(`Puntos: ${this.score}`);
     this.livesText.setText('❤️'.repeat(Math.max(0, this.lives)) || '💀');
     this.comboText.setText(this.comboCount >= 2 ? `Combo: ${this.comboCount}` : '');
+    this.worldText
+      .setText(`MUNDO ${this.currentWorld.id}/5  •  ${this.currentWorld.name.toUpperCase()}`)
+      .setColor(this.currentWorld.colorHex);
     if (this.activeWeapon) {
       const weapon = WEAPONS[this.activeWeapon];
       this.weaponText
@@ -1509,6 +2080,16 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  private triggerControlHaptic(): void {
+    if ('vibrate' in navigator) {
+      try {
+        navigator.vibrate(18);
+      } catch {
+        // Vibration is optional and may be blocked by the device.
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Pause / end
   // ---------------------------------------------------------------------------
@@ -1519,6 +2100,7 @@ export class GameScene extends Phaser.Scene {
     }
     this.paused = !this.paused;
     if (this.paused) {
+      this.clearTouchControls();
       this.physics.pause();
       this.showPauseOverlay();
     } else {
@@ -1564,12 +2146,15 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.gameOver = true;
-    this.spawnTimer?.remove();
+    this.stopWorldTimers();
     this.countdownTimer?.remove();
     this.weaponTimer?.remove();
     this.firstWeaponTimer?.remove();
-    this.enemyTimer?.remove();
-    this.firstEnemyTimer?.remove();
+    this.bossProjectiles?.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) this.recycleEnemyProjectile(projectile);
+      return true;
+    });
     this.physics.pause();
     audioManager.play('win');
 
@@ -1578,7 +2163,7 @@ export class GameScene extends Phaser.Scene {
       caughtItems: this.caughtItems,
       missedItems: this.missedItems,
       livesRemaining: Math.max(0, this.lives),
-      durationSeconds: this.config.durationSeconds,
+      durationSeconds: Math.max(1, this.campaignElapsedSeconds),
       selectedBranch: (this.registry.get(REGISTRY.selectedBranch) as string) ?? 'auroras',
       clientSessionId: generateUuid(),
     };
@@ -1595,12 +2180,12 @@ export class GameScene extends Phaser.Scene {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = undefined;
     }
-    this.spawnTimer?.remove();
+    this.stopWorldTimers();
     this.countdownTimer?.remove();
     this.weaponTimer?.remove();
     this.firstWeaponTimer?.remove();
-    this.enemyTimer?.remove();
-    this.firstEnemyTimer?.remove();
+    this.boss?.recycle();
+    this.clearTouchControls();
     this.player.setCovering(false);
     this.equippedWeaponSprite?.destroy();
     this.equippedWeaponSprite = undefined;

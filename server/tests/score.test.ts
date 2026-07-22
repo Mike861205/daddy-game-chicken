@@ -23,7 +23,7 @@ describe('validateScore', () => {
   });
 
   it('rejects durations above the maximum', () => {
-    const result = validateScore({ score: 100, durationSeconds: 999 });
+    const result = validateScore({ score: 100, durationSeconds: 7201 });
     expect(result.valid).toBe(false);
   });
 

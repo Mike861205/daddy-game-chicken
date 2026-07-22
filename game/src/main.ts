@@ -19,6 +19,14 @@ const config: Phaser.Types.Core.GameConfig = {
   dom: {
     createContainer: true,
   },
+  input: {
+    // Four active pointers allow moving, covering and firing at the same time
+    // on phones and tablets without one finger cancelling another.
+    activePointers: 4,
+    touch: {
+      capture: true,
+    },
+  },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

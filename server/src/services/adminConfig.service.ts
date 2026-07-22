@@ -7,6 +7,7 @@ export interface AdminGameConfig {
   businessPhone: string;
   rewardExpiryHours: number;
   difficultyLevel: number;
+  bossArrivalSeconds: number;
   tiers: PromotionTier[];
 }
 
@@ -39,6 +40,14 @@ export async function saveAdminGameConfig(config: AdminGameConfig): Promise<Admi
       where: { key: 'game.difficulty' },
       update: { value: { level: config.difficultyLevel } },
       create: { key: 'game.difficulty', value: { level: config.difficultyLevel } },
+    }),
+    prisma.gameConfiguration.upsert({
+      where: { key: 'game.campaign' },
+      update: { value: { bossArrivalSeconds: config.bossArrivalSeconds, worldCount: 5 } },
+      create: {
+        key: 'game.campaign',
+        value: { bossArrivalSeconds: config.bossArrivalSeconds, worldCount: 5 },
+      },
     }),
   ]);
 

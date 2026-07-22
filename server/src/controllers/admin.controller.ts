@@ -28,6 +28,7 @@ const configSchema = z
     businessPhone: z.string().trim().regex(/^\d{10,15}$/u, 'Usa sólo números, incluyendo lada.'),
     rewardExpiryHours: z.number().int().min(1).max(2160),
     difficultyLevel: z.number().int().min(0).max(10),
+    bossArrivalSeconds: z.number().int().min(30).max(600),
     tiers: z.array(tierSchema).min(1).max(12),
   })
   .superRefine((value, ctx) => {

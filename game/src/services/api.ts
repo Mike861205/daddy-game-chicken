@@ -39,6 +39,10 @@ export const DEFAULT_CONFIG: PublicConfig = {
   durationSeconds: 60,
   startingLives: 3,
   difficultyLevel: 5,
+  campaign: {
+    bossArrivalSeconds: 120,
+    worldCount: 5,
+  },
   scoring: {
     normalItemPoints: 100,
     specialItemPoints: 200,

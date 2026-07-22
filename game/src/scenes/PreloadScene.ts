@@ -3,6 +3,7 @@ import { REGISTRY, SCENES } from '../config/constants.js';
 import { ALL_ITEMS, EXTRA_IMAGE_KEYS } from '../config/items.js';
 import { generatePlaceholderTextures } from '../utils/placeholders.js';
 import { api } from '../services/api.js';
+import { WORLDS } from '../config/worlds.js';
 
 /**
  * Loads game assets behind a six-second branded cinematic intro.
@@ -36,6 +37,16 @@ export class PreloadScene extends Phaser.Scene {
       `${imageBase}/enemigos-anim.png?v=${assetVersion}`,
       { frameWidth: 512, frameHeight: 512 },
     );
+    for (const world of WORLDS) {
+      this.load.image(
+        world.backgroundKey,
+        `${imageBase}/${world.backgroundKey}.jpg?v=${assetVersion}`,
+      );
+      this.load.image(
+        world.bossTexture,
+        `${imageBase}/${world.bossTexture}.png?v=${assetVersion}`,
+      );
+    }
     for (const item of ALL_ITEMS) {
       this.load.image(item.key, `${imageBase}/${item.key}.png?v=${assetVersion}`);
     }
@@ -82,21 +93,56 @@ export class PreloadScene extends Phaser.Scene {
     const fill = document.querySelector<HTMLElement>('.loading-bar > span');
     const percent = document.querySelector<HTMLElement>('.loading-percent');
     const label = document.querySelector<HTMLElement>('.loading-text');
+    const stage = document.querySelector<HTMLElement>('.intro-stage');
+    const runner = document.querySelector<HTMLElement>('.intro-runner');
+    const bossPortal = document.querySelector<HTMLElement>('.intro-boss-portal');
+    const bosses = [...document.querySelectorAll<HTMLElement>('.intro-boss')];
+    const bossLabel = document.querySelector<HTMLElement>('.intro-boss-label strong');
     fill?.style.setProperty('--loading-progress', `${percentage}%`);
     bar?.setAttribute('aria-valuenow', String(percentage));
     if (percent) {
       percent.textContent = `${percentage}%`;
     }
     if (label) {
-      label.textContent = progress < 0.22
+      label.textContent = progress < 0.16
         ? 'ENCENDIENDO EL NEÓN'
-        : progress < 0.48
-          ? 'CARGANDO EL ARSENAL'
-          : progress < 0.74
-            ? 'ACTIVANDO PODERES'
-            : progress < 0.96
-              ? 'ABRIENDO LA ARENA'
-              : '¡TODO LISTO!';
+        : progress < 0.32
+          ? 'ESCANEANDO BAHÍA NEÓN'
+          : progress < 0.48
+            ? 'RASTREANDO PUERTO CORSARIO'
+            : progress < 0.64
+              ? 'ABRIENDO TEMPLO POSEIDÓN'
+              : progress < 0.8
+                ? 'AISLANDO PANTANO TÓXICO'
+                : progress < 0.98
+                  ? 'LOCALIZANDO FORTALEZA OMEGA'
+                  : '¡MISIÓN LISTA!';
+    }
+
+    // The runner is driven by the exact same progress value as the bar. CSS
+    // used to start before Phaser's six-second clock, making Daddy arrive early
+    // and appear frozen at the finish line while loading continued.
+    if (stage && runner) {
+      const runnerWidth = runner.getBoundingClientRect().width;
+      const startX = -runnerWidth * 0.58;
+      const endX = stage.clientWidth - runnerWidth * 0.78;
+      const x = Phaser.Math.Linear(startX, endX, progress);
+      const stride = Math.sin(progress * Math.PI * 12) * 2.5;
+      const scale = 0.86 + Math.sin(progress * Math.PI) * 0.14;
+      runner.style.left = '0px';
+      runner.style.transform = `translate3d(${x}px, ${stride}px, 0) scale(${scale})`;
+    }
+
+    if (bosses.length > 0) {
+      const activeBossIndex = Math.min(bosses.length - 1, Math.floor(progress * bosses.length));
+      bosses.forEach((boss, index) => boss.classList.toggle('is-active', index === activeBossIndex));
+      const bossOnLeft = activeBossIndex % 2 === 1;
+      bossPortal?.classList.toggle('is-left', bossOnLeft);
+      bossPortal?.classList.toggle('is-right', !bossOnLeft);
+      const activeBoss = bosses[activeBossIndex];
+      if (bossLabel && activeBoss) {
+        bossLabel.textContent = activeBoss.dataset.bossName ?? 'GRAN JEFE';
+      }
     }
   }
 }

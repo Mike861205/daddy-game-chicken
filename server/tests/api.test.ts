@@ -58,6 +58,7 @@ describe('Super Admin', () => {
       businessPhone: '6241548148',
       rewardExpiryHours: 168,
       difficultyLevel: 8,
+      bossArrivalSeconds: 120,
       tiers: [
         {
           levelName: 'Nivel manual',
@@ -72,9 +73,13 @@ describe('Super Admin', () => {
 
     expect(response.status).toBe(200);
     expect(response.body.data.difficultyLevel).toBe(8);
+    expect(response.body.data.bossArrivalSeconds).toBe(120);
     expect(response.body.data.tiers[0].levelName).toBe('Nivel manual');
     expect(prismaMock.gameConfiguration.upsert).toHaveBeenCalledWith(
       expect.objectContaining({ where: { key: 'game.difficulty' } }),
+    );
+    expect(prismaMock.gameConfiguration.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'game.campaign' } }),
     );
   });
 
@@ -85,6 +90,7 @@ describe('Super Admin', () => {
       businessPhone: '6241548148',
       rewardExpiryHours: 168,
       difficultyLevel: 11,
+      bossArrivalSeconds: 120,
       tiers: [
         {
           levelName: 'Nivel fuera de rango',
@@ -157,6 +163,7 @@ describe('GET /api/config/public', () => {
     expect(response.status).toBe(200);
     expect(response.body.data.durationSeconds).toBe(60);
     expect(response.body.data.difficultyLevel).toBe(5);
+    expect(response.body.data.campaign).toEqual({ bossArrivalSeconds: 120, worldCount: 5 });
     expect(Array.isArray(response.body.data.branches)).toBe(true);
   });
 });

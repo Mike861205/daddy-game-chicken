@@ -104,6 +104,37 @@
             </div>
           </section>
 
+          <section class="panel campaign-panel">
+            <div class="panel__heading panel__heading--split">
+              <div class="heading-group">
+                <div class="panel__icon panel__icon--campaign">5</div>
+                <div>
+                  <p class="eyebrow">CAMPAÑA DE CINCO MUNDOS</p>
+                  <h2>Tiempo de llegada del gran jefe</h2>
+                </div>
+              </div>
+              <span class="campaign-status"><i></i> 5 jefes activos</span>
+            </div>
+            <p class="section-help">
+              Cada mundo comienza con la partida normal. Al terminar este tiempo aparece su gran jefe;
+              hay que vencerlo para desbloquear el escenario siguiente.
+            </p>
+            <div class="campaign-config">
+              <label class="field campaign-time-field">
+                <span>Segundos antes del jefe (por mundo)</span>
+                <div class="suffix-input"><input id="boss-arrival-seconds" type="number" min="30" max="600" step="10" value="120" required /><b>seg</b></div>
+                <small id="boss-arrival-preview">El jefe final aparecerá después de 2 min de juego normal en cada mundo.</small>
+              </label>
+              <div class="world-route" aria-label="Ruta de la campaña">
+                <span><b>1</b>Bahía Neón</span>
+                <span><b>2</b>Puerto Corsario</span>
+                <span><b>3</b>Templo Poseidón</span>
+                <span><b>4</b>Pantano Tóxico</span>
+                <span><b>5</b>Fortaleza Omega</span>
+              </div>
+            </div>
+          </section>
+
           <section class="panel rewards-panel">
             <div class="panel__heading panel__heading--split">
               <div class="heading-group">
@@ -131,22 +162,22 @@
         <section id="deployment-panel" class="panel deployment-panel" hidden>
           <div class="panel__heading panel__heading--split">
             <div class="heading-group">
-              <div class="panel__icon panel__icon--deploy">â‡§</div>
+              <div class="panel__icon panel__icon--deploy">⇧</div>
               <div>
                 <p class="eyebrow">DESPLIEGUE LOCAL SEGURO</p>
-                <h2>Push + Deploy a producciÃ³n</h2>
+                <h2>Push + Deploy a producción</h2>
               </div>
             </div>
             <span id="deployment-state" class="deployment-state">Listo</span>
           </div>
           <p class="section-help deployment-help">
-            Valida TypeScript, lint, pruebas y build; crea el commit, envÃ­a <code>main</code>
-            a GitHub y actualiza Liquid Web por SSH. Este mÃ³dulo sÃ³lo funciona en localhost.
+            Valida TypeScript, lint, pruebas y build; crea el commit, envía <code>main</code>
+            a GitHub y actualiza Liquid Web por SSH. Este módulo sólo funciona en localhost.
           </p>
           <div class="deployment-controls">
             <label class="field">
               <span>Mensaje del commit</span>
-              <input id="deployment-message" maxlength="120" value="ActualizaciÃ³n de Daddy Game Chicken" />
+              <input id="deployment-message" maxlength="120" value="Actualización de Daddy Game Chicken" />
             </label>
             <button id="deployment-button" class="button button--deploy" type="button">
               Push + Deploy
@@ -156,9 +187,50 @@
             <strong id="deployment-phase">Listo para desplegar</strong>
             <span id="deployment-commit"></span>
           </div>
-          <pre id="deployment-logs" class="deployment-logs" aria-live="polite">Sin ejecuciones todavÃ­a.</pre>
+          <pre id="deployment-logs" class="deployment-logs" aria-live="polite">Sin ejecuciones todavía.</pre>
         </section>
       </main>
+    </div>
+
+    <div id="deployment-confirm-modal" class="deployment-modal" hidden aria-hidden="true">
+      <button class="deployment-modal__backdrop" type="button" data-deployment-close aria-label="Cerrar confirmación"></button>
+      <section class="deployment-dialog" role="dialog" aria-modal="true" aria-labelledby="deployment-dialog-title" aria-describedby="deployment-dialog-description">
+        <button class="deployment-dialog__close" type="button" data-deployment-close aria-label="Cerrar">×</button>
+        <div class="deployment-dialog__hero">
+          <div class="deployment-dialog__icon" aria-hidden="true"><span>⇧</span></div>
+          <div>
+            <p class="eyebrow">CONFIRMACIÓN DE PRODUCCIÓN</p>
+            <h2 id="deployment-dialog-title">¿Publicar esta actualización?</h2>
+            <p id="deployment-dialog-description">Revisa el resumen antes de modificar el servidor de Liquid Web.</p>
+          </div>
+        </div>
+
+        <div class="deployment-target">
+          <span>DESTINO</span>
+          <strong><i></i> Producción · Liquid Web · puerto 3004</strong>
+        </div>
+
+        <div class="deployment-commit-preview">
+          <span>MENSAJE DEL COMMIT</span>
+          <strong id="deployment-confirm-message"></strong>
+        </div>
+
+        <ol class="deployment-checklist">
+          <li><b>1</b><span><strong>Validar proyecto</strong><small>TypeScript, lint, pruebas y compilación.</small></span></li>
+          <li><b>2</b><span><strong>Push a GitHub</strong><small>Crear commit y enviar la rama <code>main</code>.</small></span></li>
+          <li><b>3</b><span><strong>Actualizar producción</strong><small>Desplegar por SSH y reiniciar el servicio.</small></span></li>
+        </ol>
+
+        <div class="deployment-warning">
+          <span aria-hidden="true">!</span>
+          <p><strong>Esta acción modifica producción.</strong> No cierres esta ventana mientras el proceso esté ejecutándose.</p>
+        </div>
+
+        <div class="deployment-dialog__actions">
+          <button id="deployment-cancel" class="button button--ghost" type="button" data-deployment-close>Cancelar</button>
+          <button id="deployment-confirm" class="button button--confirm-deploy" type="button"><span>⇧</span> Confirmar Push + Deploy</button>
+        </div>
+      </section>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

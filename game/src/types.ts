@@ -18,6 +18,10 @@ export interface PublicConfig {
   durationSeconds: number;
   startingLives: number;
   difficultyLevel: number;
+  campaign: {
+    bossArrivalSeconds: number;
+    worldCount: number;
+  };
   scoring: {
     normalItemPoints: number;
     specialItemPoints: number;

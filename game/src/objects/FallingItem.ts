@@ -15,11 +15,31 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
   private driftSpeed = 0;
   private baseScaleX = 1;
   private baseScaleY = 1;
+  private readonly categoryAura: Phaser.GameObjects.Arc;
+  private readonly dangerLabel: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, '__DEFAULT');
     scene.add.existing(this);
     scene.physics.add.existing(this);
+    this.categoryAura = scene.add
+      .circle(x, y, 52, 0x32e35b, 0.1)
+      .setStrokeStyle(4, 0x32e35b, 0.65)
+      .setDepth(7)
+      .setVisible(false);
+    this.dangerLabel = scene.add
+      .text(x, y - 62, '⚠  −1 VIDA', {
+        fontFamily: 'Arial Black',
+        fontSize: '14px',
+        color: '#ffffff',
+        backgroundColor: '#8a0822',
+        stroke: '#320009',
+        strokeThickness: 3,
+        padding: { x: 7, y: 3 },
+      })
+      .setOrigin(0.5)
+      .setDepth(10)
+      .setVisible(false);
     this.setActive(false).setVisible(false);
   }
 
@@ -32,6 +52,29 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     this.setActive(true).setVisible(true);
     this.setAngle(0);
     this.setAlpha(1);
+    this.setDepth(8);
+
+    const auraColor = definition.category === 'bad'
+      ? 0xff234f
+      : definition.category === 'good'
+        ? 0x32e35b
+        : definition.category === 'weapon'
+          ? 0xffd21e
+          : 0x43d9ff;
+    this.categoryAura
+      .setPosition(x, -60)
+      .setDisplaySize(size + 34, size + 34)
+      .setFillStyle(auraColor, definition.category === 'bad' ? 0.24 : 0.1)
+      .setStrokeStyle(definition.category === 'bad' ? 6 : 3, auraColor, 0.9)
+      .setVisible(true);
+    this.dangerLabel
+      .setPosition(x, -118)
+      .setVisible(definition.category === 'bad');
+    if (definition.category === 'bad') {
+      this.setTint(0xff9aaa);
+    } else {
+      this.clearTint();
+    }
 
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
@@ -88,6 +131,17 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     const pulseStrength = this.definition.category === 'weapon' ? 0.085 : 0.035;
     const pulse = Math.sin(this.flightAge * 0.006 + this.flightPhase) * pulseStrength;
     this.setScale(this.baseScaleX * (1 + pulse), this.baseScaleY * (1 - pulse * 0.45));
+
+    const indicatorPulse = (Math.sin(this.flightAge * 0.01 + this.flightPhase) + 1) / 2;
+    const isDanger = this.definition.category === 'bad';
+    this.categoryAura
+      .setPosition(this.x, this.y)
+      .setScale(0.94 + indicatorPulse * (isDanger ? 0.18 : 0.08))
+      .setAlpha(isDanger ? 0.55 + indicatorPulse * 0.45 : 0.58 + indicatorPulse * 0.2);
+    this.dangerLabel
+      .setPosition(this.x, this.y - 60)
+      .setScale(0.96 + indicatorPulse * 0.08)
+      .setAlpha(0.78 + indicatorPulse * 0.22);
   }
 
   setFallSpeed(speed: number): void {
@@ -101,7 +155,16 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     this.scene.tweens.killTweensOf(this);
     this.setScale(this.baseScaleX, this.baseScaleY);
     this.setAlpha(1);
+    this.clearTint();
+    this.categoryAura.setVisible(false);
+    this.dangerLabel.setVisible(false);
     this.disableBody(true, true);
     this.setActive(false).setVisible(false);
+  }
+
+  destroy(fromScene?: boolean): void {
+    this.categoryAura.destroy();
+    this.dangerLabel.destroy();
+    super.destroy(fromScene);
   }
 }

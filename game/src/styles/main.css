@@ -341,6 +341,93 @@ body {
   background: linear-gradient(to bottom, rgba(255, 210, 30, 0.2), transparent);
 }
 
+.intro-boss-portal {
+  --boss-portal-width: clamp(150px, 25vh, 220px);
+  position: absolute;
+  z-index: 3;
+  top: -5%;
+  left: 2%;
+  width: var(--boss-portal-width);
+  height: 94%;
+  pointer-events: none;
+  transition: left 0.34s cubic-bezier(.2,.8,.25,1);
+  will-change: left;
+}
+
+.intro-boss-portal.is-left { left: 2%; }
+.intro-boss-portal.is-right { left: calc(98% - var(--boss-portal-width)); }
+
+.intro-boss {
+  position: absolute;
+  inset: 0 0 28px;
+  width: 100%;
+  height: calc(100% - 28px);
+  object-fit: contain;
+  opacity: 0;
+  transform: translate3d(42px, 8px, 0) scale(0.78) rotate(4deg);
+  filter:
+    brightness(0.62)
+    drop-shadow(0 12px 7px rgba(0, 0, 0, 0.7))
+    drop-shadow(0 0 14px rgba(230, 38, 43, 0.72));
+  transition: opacity 0.24s ease, filter 0.24s ease;
+  will-change: transform, opacity;
+}
+
+.intro-boss.is-active {
+  opacity: 0.94;
+  filter:
+    brightness(1)
+    drop-shadow(0 12px 7px rgba(0, 0, 0, 0.72))
+    drop-shadow(0 0 13px var(--daddy-red))
+    drop-shadow(0 0 26px rgba(255, 210, 30, 0.52));
+  animation: boss-intro-movement-right 0.86s ease-in-out infinite;
+}
+
+.intro-boss-portal.is-left .intro-boss {
+  transform: translate3d(-42px, 8px, 0) scale(0.78) rotate(-4deg);
+}
+
+.intro-boss-portal.is-left .intro-boss.is-active {
+  animation-name: boss-intro-movement-left;
+}
+
+.boss-warning-ring {
+  position: absolute;
+  top: 42%;
+  left: 50%;
+  width: 82%;
+  aspect-ratio: 1;
+  border: 3px solid rgba(230, 38, 43, 0.52);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 22px rgba(230, 38, 43, 0.6), inset 0 0 18px rgba(255, 210, 30, 0.18);
+  animation: boss-target-pulse 0.72s ease-out infinite;
+}
+
+.boss-warning-ring::before,
+.boss-warning-ring::after {
+  content: '';
+  position: absolute;
+  background: rgba(255, 210, 30, 0.78);
+  box-shadow: 0 0 8px var(--daddy-yellow);
+}
+.boss-warning-ring::before { top: 50%; left: -12%; width: 124%; height: 1px; }
+.boss-warning-ring::after { top: -12%; left: 50%; width: 1px; height: 124%; }
+
+.intro-boss-label {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  text-align: center;
+  font-family: 'Arial Black', sans-serif;
+  text-shadow: 2px 2px 0 #020718, 0 0 8px var(--daddy-red);
+}
+.intro-boss-label small { color: #ff7286; font-size: 8px; letter-spacing: 0.18em; }
+.intro-boss-label strong { overflow: hidden; color: var(--daddy-yellow); font-size: 12px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+
 .intro-runner {
   position: absolute;
   z-index: 5;
@@ -348,7 +435,8 @@ body {
   left: -14%;
   width: clamp(140px, 21vh, 205px);
   aspect-ratio: 1;
-  animation: runner-cross 6s cubic-bezier(.18,.05,.74,.98) forwards;
+  transform: translate3d(0, 0, 0) scale(0.86);
+  will-change: transform;
 }
 
 .runner-sprite {
@@ -364,16 +452,26 @@ body {
   animation: runner-frames 0.2s steps(1) infinite;
 }
 
-.runner-weapon {
+.runner-gun {
   position: absolute;
   z-index: 7;
-  top: 45%;
+  top: 18%;
   left: 59%;
-  width: 45%;
-  height: 24%;
+  width: 35%;
+  aspect-ratio: 1;
+  transform-origin: 28% 78%;
+  animation: gun-hand-track 0.2s steps(1) infinite;
+  will-change: top, left;
+}
+
+.runner-weapon {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   transform: rotate(-8deg);
-  transform-origin: 10% 50%;
+  transform-origin: 28% 78%;
   filter: drop-shadow(0 0 7px #43d9ff);
   animation: weapon-recoil 0.75s ease-out infinite;
 }
@@ -381,8 +479,8 @@ body {
 .muzzle-flash {
   position: absolute;
   z-index: 8;
-  top: 48%;
-  left: 96%;
+  top: 28%;
+  left: 86%;
   width: 25px;
   height: 25px;
   border-radius: 50%;
@@ -394,6 +492,23 @@ body {
   clip-path: polygon(0 40%, 100% 0, 67% 50%, 100% 100%, 0 60%);
   animation: muzzle-burst 0.75s steps(1) infinite;
 }
+
+.intro-shot {
+  position: absolute;
+  z-index: 9;
+  top: 32%;
+  left: 92%;
+  width: 28px;
+  height: 5px;
+  border-radius: 999px;
+  opacity: 0;
+  background: linear-gradient(90deg, #fff, #43d9ff 42%, transparent);
+  box-shadow: 0 0 7px #fff, 0 0 13px #43d9ff;
+  transform-origin: left center;
+  animation: intro-shot-flight 0.78s linear infinite;
+}
+.intro-shot--two { animation-delay: -0.27s; }
+.intro-shot--three { animation-delay: -0.54s; }
 
 .speed-line {
   position: absolute;
@@ -551,7 +666,28 @@ body {
 @keyframes neon-flicker { 0%, 18%, 22%, 63%, 100% { opacity: 1; } 20%, 64% { opacity: .72; } 21% { opacity: .94; } }
 @keyframes title-glitch { 0%, 88%, 100% { translate: 0; } 89% { translate: 8px -2px; } 92% { translate: -7px 2px; } }
 @keyframes runner-frames { 0%, 49.9% { background-position: 100% 0; } 50%, 100% { background-position: 0 100%; } }
-@keyframes runner-cross { 0% { left: -15%; transform: scale(.84); } 12% { left: 2%; transform: scale(1); } 72% { left: 63%; transform: scale(1); } 100% { left: 86%; transform: scale(.9); } }
+@keyframes boss-intro-movement-right {
+  0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(-2deg); }
+  50% { transform: translate3d(-8px, -9px, 0) scale(0.96) rotate(2deg); }
+}
+@keyframes boss-intro-movement-left {
+  0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(2deg); }
+  50% { transform: translate3d(8px, -9px, 0) scale(0.96) rotate(-2deg); }
+}
+@keyframes gun-hand-track {
+  0%, 49.9% { top: 18%; left: 59%; }
+  50%, 100% { top: 0%; left: 69%; }
+}
+@keyframes intro-shot-flight {
+  0%, 12% { opacity: 0; transform: translate3d(0, 0, 0) scaleX(0.2); }
+  18% { opacity: 1; }
+  76% { opacity: 0.92; }
+  100% { opacity: 0; transform: translate3d(360px, -15px, 0) scaleX(1.8); }
+}
+@keyframes boss-target-pulse {
+  0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.78); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.18); }
+}
 @keyframes weapon-recoil { 0%, 72%, 100% { transform: rotate(-8deg) translateX(0); } 76% { transform: rotate(-14deg) translateX(-9px); } }
 @keyframes muzzle-burst { 0%, 73%, 83%, 100% { opacity: 0; transform: scale(.2); } 75%, 79% { opacity: 1; transform: scale(1.25); } }
 @keyframes speed-lines { from { transform: translateX(40px) scaleX(.2); opacity: 0; } 35% { opacity: 1; } to { transform: translateX(-380px) scaleX(1); opacity: 0; } }
@@ -568,6 +704,9 @@ body {
   .loading-subtitle { top: 190px; }
   .intro-stage { top: 235px; height: min(31vh, 230px); width: 96vw; }
   .intro-runner { width: clamp(130px, 23vh, 180px); }
+  .intro-boss-portal { --boss-portal-width: clamp(120px, 22vh, 165px); top: 3%; height: 86%; }
+  .intro-boss-label small { font-size: 7px; }
+  .intro-boss-label strong { font-size: 10px; }
   .floating-icon { width: 46px; opacity: .86; }
   .floating-icon--fries { top: 25%; left: 2%; }
   .floating-icon--trident { top: 26%; right: 2%; }
@@ -582,6 +721,7 @@ body {
   .loading-title { top: 96px; font-size: 28px; }
   .loading-subtitle { top: 130px; }
   .intro-stage { top: 155px; height: 160px; }
+  .intro-boss-portal { --boss-portal-width: 116px; height: 92%; }
   .loading-progress-wrap { bottom: 16px; }
   .floating-icon { width: 38px; }
 }
@@ -845,7 +985,9 @@ body {
   .intro-orbit,
   .runner-sprite,
   .runner-weapon,
+  .runner-gun,
   .muzzle-flash,
+  .intro-shot,
   .speed-line,
   .intro-explosion,
   .floating-icon,
@@ -853,8 +995,12 @@ body {
     animation: none;
   }
 
+  .intro-boss,
+  .boss-warning-ring {
+    animation: none;
+  }
+
   .intro-runner {
-    left: 38%;
     animation: none;
   }
 }

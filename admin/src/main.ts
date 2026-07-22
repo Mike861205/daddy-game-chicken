@@ -15,6 +15,7 @@ interface AdminConfig {
   businessPhone: string;
   rewardExpiryHours: number;
   difficultyLevel: number;
+  bossArrivalSeconds: number;
   tiers: PromotionTier[];
 }
 
@@ -49,9 +50,13 @@ const deploymentState = required<HTMLElement>('deployment-state');
 const deploymentPhase = required<HTMLElement>('deployment-phase');
 const deploymentCommit = required<HTMLElement>('deployment-commit');
 const deploymentLogs = required<HTMLElement>('deployment-logs');
+const deploymentModal = required<HTMLElement>('deployment-confirm-modal');
+const deploymentConfirmButton = required<HTMLButtonElement>('deployment-confirm');
+const deploymentConfirmMessage = required<HTMLElement>('deployment-confirm-message');
 
 let currentConfig: AdminConfig | null = null;
 let deploymentTimer: number | null = null;
+let pendingDeploymentMessage = '';
 
 function required<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -86,6 +91,8 @@ async function showAdmin(): Promise<void> {
   currentConfig = await api<AdminConfig>('/configuration');
   required<HTMLInputElement>('business-phone').value = currentConfig.businessPhone;
   required<HTMLInputElement>('reward-expiry').value = String(currentConfig.rewardExpiryHours);
+  required<HTMLInputElement>('boss-arrival-seconds').value = String(currentConfig.bossArrivalSeconds);
+  updateBossArrivalPreview(currentConfig.bossArrivalSeconds);
   setDifficulty(currentConfig.difficultyLevel);
   renderTiers();
   await loadDeploymentModule();
@@ -115,6 +122,17 @@ function setDifficulty(rawLevel: number): void {
     <span><b>${enemyFrequencyPercent}%</b> de frecuencia rival</span>`;
 }
 
+function updateBossArrivalPreview(rawSeconds: number): void {
+  const seconds = Math.max(30, Math.min(600, Math.round(rawSeconds || 120)));
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  const formatted = minutes > 0
+    ? `${minutes} min${remainingSeconds > 0 ? ` ${remainingSeconds} s` : ''}`
+    : `${remainingSeconds} s`;
+  required<HTMLElement>('boss-arrival-preview').textContent =
+    `El jefe final aparecerá después de ${formatted} de juego normal en cada mundo.`;
+}
+
 function stopDeploymentPolling(): void {
   if (deploymentTimer !== null) {
     window.clearInterval(deploymentTimer);
@@ -133,14 +151,14 @@ function renderDeployment(status: DeploymentStatus): void {
     idle: 'Listo',
     running: 'En proceso',
     succeeded: 'Completado',
-    failed: 'FallÃ³',
+    failed: 'Falló',
   }[status.state];
   deploymentPhase.textContent = status.phase;
   deploymentCommit.textContent = status.commit ? `Commit ${status.commit.slice(0, 12)}` : '';
-  deploymentLogs.textContent = status.logs.length > 0 ? status.logs.join('\n') : 'Sin ejecuciones todavÃ­a.';
+  deploymentLogs.textContent = status.logs.length > 0 ? status.logs.join('\n') : 'Sin ejecuciones todavía.';
   deploymentLogs.scrollTop = deploymentLogs.scrollHeight;
   deploymentButton.disabled = status.state === 'running';
-  deploymentButton.textContent = status.state === 'running' ? 'Desplegandoâ€¦' : 'Push + Deploy';
+  deploymentButton.textContent = status.state === 'running' ? 'Desplegando…' : 'Push + Deploy';
 
   if (status.state === 'running' && deploymentTimer === null) {
     deploymentTimer = window.setInterval(() => void refreshDeploymentStatus(), 1500);
@@ -286,6 +304,7 @@ configForm.addEventListener('submit', async (event) => {
     businessPhone: required<HTMLInputElement>('business-phone').value.replace(/\D/gu, ''),
     rewardExpiryHours: Number(required<HTMLInputElement>('reward-expiry').value),
     difficultyLevel: Number(difficultyNumber.value),
+    bossArrivalSeconds: Number(required<HTMLInputElement>('boss-arrival-seconds').value),
     tiers: readTierCards(),
   };
 
@@ -305,17 +324,31 @@ configForm.addEventListener('submit', async (event) => {
 required<HTMLButtonElement>('add-tier').addEventListener('click', addTier);
 difficultyLevel.addEventListener('input', () => setDifficulty(Number(difficultyLevel.value)));
 difficultyNumber.addEventListener('input', () => setDifficulty(Number(difficultyNumber.value)));
-deploymentButton.addEventListener('click', async () => {
-  const message = deploymentMessage.value.trim();
-  if (message.length < 3) {
-    deploymentMessage.focus();
-    return;
-  }
-  const confirmed = window.confirm(
-    'Se validarÃ¡ todo el proyecto, se enviarÃ¡ main a GitHub y se actualizarÃ¡ producciÃ³n. Â¿Continuar?',
-  );
-  if (!confirmed) return;
+required<HTMLInputElement>('boss-arrival-seconds').addEventListener('input', (event) => {
+  updateBossArrivalPreview(Number((event.currentTarget as HTMLInputElement).value));
+});
 
+function openDeploymentModal(message: string): void {
+  pendingDeploymentMessage = message;
+  deploymentConfirmMessage.textContent = message;
+  deploymentModal.hidden = false;
+  deploymentModal.setAttribute('aria-hidden', 'false');
+  document.body.classList.add('deployment-modal-open');
+  window.requestAnimationFrame(() => deploymentModal.classList.add('is-open'));
+  deploymentConfirmButton.focus();
+}
+
+function closeDeploymentModal(): void {
+  deploymentModal.classList.remove('is-open');
+  deploymentModal.setAttribute('aria-hidden', 'true');
+  document.body.classList.remove('deployment-modal-open');
+  window.setTimeout(() => {
+    deploymentModal.hidden = true;
+  }, 180);
+}
+
+async function startDeployment(message: string): Promise<void> {
+  closeDeploymentModal();
   deploymentButton.disabled = true;
   try {
     renderDeployment(
@@ -326,9 +359,34 @@ deploymentButton.addEventListener('click', async () => {
     );
   } catch (error) {
     deploymentState.className = 'deployment-state deployment-state--failed';
-    deploymentState.textContent = 'FallÃ³';
+    deploymentState.textContent = 'Falló';
     deploymentPhase.textContent = error instanceof Error ? error.message : 'No se pudo iniciar.';
     deploymentButton.disabled = false;
+  }
+}
+
+deploymentButton.addEventListener('click', () => {
+  const message = deploymentMessage.value.trim();
+  if (message.length < 3) {
+    deploymentMessage.focus();
+    return;
+  }
+  openDeploymentModal(message);
+});
+
+deploymentModal.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement;
+  if (target.closest('[data-deployment-close]')) {
+    closeDeploymentModal();
+  }
+});
+deploymentConfirmButton.addEventListener('click', () => {
+  const message = pendingDeploymentMessage;
+  if (message) void startDeployment(message);
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !deploymentModal.hidden) {
+    closeDeploymentModal();
   }
 });
 required<HTMLButtonElement>('logout-button').addEventListener('click', async () => {

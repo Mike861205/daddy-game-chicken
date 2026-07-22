@@ -40,6 +40,14 @@ const gameConfigurations: { key: string; value: unknown }[] = [
     },
   },
   {
+    key: 'game.campaign',
+    value: {
+      // Normal gameplay time before each world's final boss appears.
+      bossArrivalSeconds: 120,
+      worldCount: 5,
+    },
+  },
+  {
     key: 'game.promotions',
     value: {
       tiers: [

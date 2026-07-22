@@ -10,7 +10,8 @@ export interface ScoreValidationConfig {
 
 export const DEFAULT_SCORE_CONFIG: ScoreValidationConfig = {
   maxScorePerSecond: 500,
-  maxDurationSeconds: 120,
+  // Five configurable worlds (up to ten minutes each) plus boss transitions.
+  maxDurationSeconds: 7200,
 };
 
 export interface ScoreValidationInput {

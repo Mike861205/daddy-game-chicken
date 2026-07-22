@@ -23,9 +23,9 @@ export class InstructionsScene extends Phaser.Scene {
       .text(
         cx,
         220,
-        'Corre con Daddy Pollo, atrapa platillos y consigue armas.\n' +
-          'Los enemigos patrullan y disparan fuego, cañón y agua.\n' +
-          'Dispárales o cúbrete: ¡cada enemigo tiene varias vidas!',
+        'Mueve a Daddy con los botones o tocando y arrastrando la pantalla.\n' +
+          'Mantén FUEGO para disparar una ráfaga continua.\n' +
+          'Rojo significa peligro y verde significa puntos.',
         {
           fontFamily: 'Arial, sans-serif',
           fontSize: '24px',
@@ -40,13 +40,14 @@ export class InstructionsScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const steps: { icon: string; text: string }[] = [
-      { icon: '👈👉', text: 'CORRE Y ESQUIVA' },
-      { icon: '⚔️', text: 'ATRAPA ARMAS' },
-      { icon: '🎯', text: 'DISPARA A LOS RIVALES' },
-      { icon: '🛡️', text: 'CÚBRETE DE SUS PODERES' },
+      { icon: '👈👉', text: 'TOCA, ARRASTRA O USA BOTONES' },
+      { icon: '🔫', text: 'INICIAS CON BLÁSTER' },
+      { icon: '🎯', text: 'MANTÉN FUEGO PARA RÁFAGA' },
+      { icon: '⚠️', text: 'ROJO = PELIGRO · −1 VIDA' },
+      { icon: '✅', text: 'VERDE = PRODUCTO BUENO' },
     ];
 
-    let y = 380;
+    let y = 365;
     for (const step of steps) {
       const card = this.add.graphics();
       card.fillStyle(COLORS.blue, 0.85);
@@ -68,12 +69,12 @@ export class InstructionsScene extends Phaser.Scene {
           wordWrap: { width: 420 },
         })
         .setOrigin(0, 0.5);
-      y += 150;
+      y += 120;
     }
 
     // Extra tips.
     this.add
-      .text(cx, y + 20, 'PC: FUEGO ESPACIO/F  •  CUBRIR S/SHIFT', {
+      .text(cx, y + 12, 'MÓVIL: MULTITÁCTIL  •  PC: ESPACIO/F Y S/SHIFT', {
         fontFamily: 'Arial, sans-serif',
         fontSize: '24px',
         color: '#21e6c1',
