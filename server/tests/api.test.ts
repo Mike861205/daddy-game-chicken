@@ -41,10 +41,10 @@ describe('Super Admin', () => {
     expect(response.status).toBe(401);
   });
 
-  it('accepts the development owner credentials', async () => {
+  it('accepts the fixed owner credentials', async () => {
     const response = await request(app).post('/api/admin/login').send({
       username: 'mike',
-      password: 'development-admin-only',
+      password: 'mike1986',
     });
     expect(response.status).toBe(200);
     expect(response.headers['set-cookie']).toBeDefined();
@@ -54,7 +54,7 @@ describe('Super Admin', () => {
     const agent = request.agent(app);
     await agent.post('/api/admin/login').send({
       username: 'mike',
-      password: 'development-admin-only',
+      password: 'mike1986',
     });
 
     const status = await agent.get('/api/admin/deployment');

@@ -22,7 +22,7 @@ const envSchema = z.object({
   REWARD_SECRET: z.string().default('change-me-in-production'),
   ADMIN_SESSION_SECRET: z.string().min(24).default('change-admin-session-secret'),
   ADMIN_USERNAME: z.string().min(3).max(80).default('mike'),
-  ADMIN_PASSWORD: z.string().min(12).max(200).default('development-admin-only'),
+  ADMIN_PASSWORD: z.string().min(8).max(200).default('mike1986'),
   LOCAL_DEPLOY_ENABLED: z.enum(['true', 'false']).default('false'),
   DEPLOY_SSH_HOST: z.string().regex(/^[A-Za-z0-9.-]+$/u).default('50.28.103.1'),
   DEPLOY_SSH_PORT: z.coerce.number().int().min(1).max(65535).default(22),
@@ -48,10 +48,6 @@ if (
   data.ADMIN_SESSION_SECRET === 'change-admin-session-secret'
 ) {
   throw new Error('ADMIN_SESSION_SECRET debe configurarse en producción.');
-}
-
-if (data.NODE_ENV === 'production' && data.ADMIN_PASSWORD === 'development-admin-only') {
-  throw new Error('ADMIN_PASSWORD debe configurarse en producción.');
 }
 
 export const env = {
