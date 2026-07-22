@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * Allowed branch identifiers. Kept in sync with the seeded configuration.
  */
-export const BRANCH_IDS = ['lomas-del-sol', 'auroras', 'san-jose-del-cabo'] as const;
+export const BRANCH_IDS = ['san-lucas', 'san-jose'] as const;
 
 /**
  * Schema for submitting a finished game session.
@@ -16,6 +16,7 @@ export const createGameSessionSchema = z.object({
     .min(1, 'El apodo es obligatorio.')
     .max(20, 'El apodo es demasiado largo.')
     .default('Jugador'),
+  name: z.string().trim().max(40, 'El nombre es demasiado largo.').optional(),
   score: z.number().int().min(0, 'El puntaje no puede ser negativo.').max(1_000_000),
   selectedBranch: z.enum(BRANCH_IDS),
   durationSeconds: z.number().int().min(1).max(120),
@@ -59,3 +60,15 @@ export const leaderboardQuerySchema = z.object({
 });
 
 export type LeaderboardQuery = z.infer<typeof leaderboardQuerySchema>;
+
+/**
+ * Query schema for looking up a returning player by phone number.
+ */
+export const playerLookupQuerySchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s]{7,20}$/u, 'Teléfono inválido.'),
+});
+
+export type PlayerLookupQuery = z.infer<typeof playerLookupQuerySchema>;

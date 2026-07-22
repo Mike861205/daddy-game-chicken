@@ -10,11 +10,11 @@ Nginx, PM2, Certbot y Neon PostgreSQL.
 > | `SERVER_IP` | IP pública del VPS |
 > | `SSH_USER` | Usuario SSH (por ejemplo `deploy`) |
 > | `REPO_URL` | URL del repositorio Git |
-> | `DOMAIN` | Dominio definitivo (ej. `juego.daddypollo.com`) |
+> | `DOMAIN` | Dominio definitivo (`daddygame.systemdem.online`) |
 > | `NEON_DATABASE_URL` | Cadena pooled de Neon |
 > | `NEON_DIRECT_URL` | Cadena direct de Neon |
 
-Dominio de ejemplo: **juego.daddypollo.com** · Puerto interno API: **3005**.
+Dominio de producción: **daddygame.systemdem.online** · Puerto interno API: **3004**.
 
 ---
 
@@ -61,12 +61,15 @@ Valores mínimos de producción:
 
 ```env
 NODE_ENV=production
-PORT=3005
+PORT=3004
 DATABASE_URL=NEON_DATABASE_URL
 DIRECT_URL=NEON_DIRECT_URL
 CORS_ORIGIN=https://DOMAIN
 PUBLIC_GAME_URL=https://DOMAIN
 REWARD_SECRET=<genera-un-valor-largo-y-aleatorio>
+ADMIN_SESSION_SECRET=<genera-otro-valor-aleatorio-de-32-bytes>
+ADMIN_USERNAME=mike
+ADMIN_PASSWORD=<genera-una-contraseña-larga-y-única>
 RATE_LIMIT_WINDOW_MS=60000
 RATE_LIMIT_MAX=60
 ```
@@ -92,7 +95,9 @@ npm run prisma:seed             # Carga configuración pública inicial
 npm run build   # Genera server/dist y game/dist
 ```
 
-El frontend queda en `/var/www/daddy-game-chicken/game/dist`.
+El juego queda en `/var/www/daddy-game-chicken/game/dist` y el panel privado en
+`/var/www/daddy-game-chicken/admin/dist/superadmin`. El dueño entra desde
+`https://DOMAIN/superadmin/`.
 
 ## 6. Configurar PM2
 
@@ -103,7 +108,7 @@ pm2 startup            # Sigue las instrucciones que imprime
 pm2 status
 ```
 
-La API se ejecuta como `daddy-game-chicken-api` en el puerto `3005`.
+La API se ejecuta como `daddy-game-chicken-api` en el puerto `3004`.
 
 ## 7. Configurar Nginx
 
@@ -125,7 +130,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 ```
 
-Nginx sirve el frontend compilado, redirige `/api` a `http://127.0.0.1:3005`,
+Nginx sirve el frontend compilado, redirige `/api` a `http://127.0.0.1:3004`,
 comprime estáticos, cachea imágenes/audio/JS/CSS y **no** cachea la API.
 
 ## 8. Configurar DNS

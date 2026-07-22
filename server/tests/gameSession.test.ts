@@ -32,7 +32,7 @@ describe('createGameSession - duplicate prevention', () => {
   const baseInput = {
     nickname: 'Tester',
     score: 1200,
-    selectedBranch: 'auroras' as const,
+    selectedBranch: 'san-jose' as const,
     durationSeconds: 60,
     caughtItems: 12,
     missedItems: 3,

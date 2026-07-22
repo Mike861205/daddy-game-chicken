@@ -12,10 +12,28 @@ type SoundName = 'catch' | 'error' | 'combo' | 'power' | 'countdown' | 'win' | '
  */
 class AudioManager {
   private context: AudioContext | null = null;
+  private readonly music: HTMLAudioElement;
+  private playbackRequest = 0;
   private enabled: boolean;
 
   constructor() {
     this.enabled = storage.getSoundEnabled();
+    this.music = new Audio('/assets/audio/musica-fondo.mp3?v=20260721');
+    this.music.loop = true;
+    this.music.preload = 'auto';
+    this.music.volume = 0.28;
+
+    // Browsers that permit autoplay start immediately. When autoplay is
+    // blocked, unlock() retries after the visitor's first click or touch.
+    if (this.enabled) {
+      this.startMusic();
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && this.enabled) {
+        this.startMusic();
+      }
+    });
   }
 
   /** Must be called from a user gesture handler to satisfy autoplay policies. */
@@ -31,6 +49,7 @@ class AudioManager {
     if (this.context && this.context.state === 'suspended') {
       void this.context.resume();
     }
+    this.startMusic();
   }
 
   isEnabled(): boolean {
@@ -40,6 +59,14 @@ class AudioManager {
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
     storage.setSoundEnabled(enabled);
+    if (enabled) {
+      this.startMusic();
+    } else {
+      this.stopMusic();
+      if (this.context?.state === 'running') {
+        void this.context.suspend();
+      }
+    }
   }
 
   toggle(): boolean {
@@ -83,6 +110,39 @@ class AudioManager {
     gain.connect(ctx.destination);
     osc.start();
     osc.stop(ctx.currentTime + duration + 0.02);
+  }
+
+  private startMusic(): void {
+    if (!this.enabled) {
+      return;
+    }
+    this.music.muted = false;
+    if (!this.music.paused) {
+      return;
+    }
+    this.playbackRequest += 1;
+    const request = this.playbackRequest;
+    const playback = this.music.play();
+    if (playback) {
+      void playback
+        .then(() => {
+          // A play() promise can resolve after the visitor already selected NO.
+          // Re-check state so a late autoplay response cannot restart the track.
+          if (!this.enabled || request !== this.playbackRequest) {
+            this.stopMusic();
+          }
+        })
+        .catch(() => {
+          // Autoplay blocked: the next unlock() call retries after interaction.
+        });
+    }
+  }
+
+  private stopMusic(): void {
+    this.playbackRequest += 1;
+    this.music.muted = true;
+    this.music.pause();
+    this.music.currentTime = 0;
   }
 }
 

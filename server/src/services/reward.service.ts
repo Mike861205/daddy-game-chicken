@@ -44,6 +44,7 @@ export async function createRewardForSession(clientSessionId: string): Promise<R
     where: { gameSessionId: session.id },
     select: {
       code: true,
+      label: true,
       rewardType: true,
       discountPercentage: true,
       expiresAt: true,
@@ -53,7 +54,7 @@ export async function createRewardForSession(clientSessionId: string): Promise<R
   if (existingReward) {
     return {
       granted: true,
-      label: promotion.label,
+      label: existingReward.label,
       code: existingReward.code,
       rewardType: existingReward.rewardType,
       discountPercentage: existingReward.discountPercentage,
@@ -73,6 +74,7 @@ export async function createRewardForSession(clientSessionId: string): Promise<R
         data: {
           gameSessionId: session.id,
           code,
+          label: promotion.label,
           rewardType: promotion.rewardType,
           discountPercentage: promotion.discountPercentage,
           status: 'AVAILABLE',
@@ -103,6 +105,7 @@ export async function createRewardForSession(clientSessionId: string): Promise<R
 
 export interface ValidatedReward {
   code: string;
+  label: string;
   status: string;
   rewardType: string;
   discountPercentage: number | null;
@@ -119,6 +122,7 @@ export async function validateRewardCode(code: string): Promise<ValidatedReward>
     where: { code },
     select: {
       code: true,
+      label: true,
       status: true,
       rewardType: true,
       discountPercentage: true,
@@ -144,6 +148,7 @@ export async function validateRewardCode(code: string): Promise<ValidatedReward>
 
   return {
     code: reward.code,
+    label: reward.label,
     status: reward.status,
     rewardType: reward.rewardType,
     discountPercentage: reward.discountPercentage,

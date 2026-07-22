@@ -54,11 +54,6 @@ export class LeaderboardScene extends Phaser.Scene {
     });
   }
 
-  private branchName(id: string): string {
-    const branch = this.config?.branches.find((b: Branch) => b.id === id);
-    return branch?.name ?? id;
-  }
-
   private createBranchFilter(): void {
     const branches: Branch[] = [{ id: '', name: 'Todas' }, ...(this.config?.branches ?? [])];
     let x = 60;
@@ -110,51 +105,84 @@ export class LeaderboardScene extends Phaser.Scene {
       return;
     }
 
-    let y = 270;
+    let y = 280;
     for (const entry of entries) {
-      const row = this.add.graphics();
       const highlight = entry.rank <= 3;
-      row.fillStyle(highlight ? COLORS.yellow : COLORS.blue, highlight ? 0.9 : 0.6);
-      row.fillRoundedRect(40, y - 32, GAME_WIDTH - 80, 64, 12);
+      const rowH = 84;
+      const row = this.add.graphics();
+      row.fillStyle(highlight ? COLORS.yellow : COLORS.blue, highlight ? 0.92 : 0.55);
+      row.fillRoundedRect(40, y - rowH / 2, GAME_WIDTH - 80, rowH, 16);
       this.listContainer.add(row);
 
       const textColor = highlight ? COLORS_HEX.blue : '#ffffff';
-      const date = new Date(entry.createdAt);
-      const dateStr = Number.isNaN(date.getTime())
-        ? ''
-        : `${date.getDate()}/${date.getMonth() + 1}`;
 
+      // Rank badge.
       const rankText = this.add
-        .text(70, y, `${entry.rank}`, {
+        .text(78, y, `${entry.rank}`, {
           fontFamily: 'Arial Black',
           fontSize: '30px',
           color: textColor,
         })
-        .setOrigin(0, 0.5);
-      const nameText = this.add
-        .text(130, y - 10, entry.nickname, {
+        .setOrigin(0.5);
+
+      // Circular avatar with the player's initial.
+      const avatarX = 160;
+      const avatarColor = this.colorFromString(entry.nickname);
+      const avatarCircle = this.add.graphics();
+      avatarCircle.fillStyle(avatarColor, 1);
+      avatarCircle.fillCircle(avatarX, y, 32);
+      avatarCircle.lineStyle(3, highlight ? COLORS.red : COLORS.yellow, 1);
+      avatarCircle.strokeCircle(avatarX, y, 32);
+      const initial = (entry.nickname.trim()[0] ?? '?').toUpperCase();
+      const avatarInitial = this.add
+        .text(avatarX, y, initial, {
           fontFamily: 'Arial Black',
-          fontSize: '26px',
+          fontSize: '32px',
+          color: '#ffffff',
+          stroke: '#000000',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5);
+
+      // Avatar name (main label).
+      const nameText = this.add
+        .text(212, y, entry.nickname, {
+          fontFamily: 'Arial Black',
+          fontSize: '30px',
           color: textColor,
+          wordWrap: { width: GAME_WIDTH - 380 },
         })
         .setOrigin(0, 0.5);
-      const branchText = this.add
-        .text(130, y + 14, `${this.branchName(entry.selectedBranch)} · ${dateStr}`, {
-          fontFamily: 'Arial',
-          fontSize: '16px',
-          color: highlight ? '#1a3a7a' : '#cfe0ff',
-        })
-        .setOrigin(0, 0.5);
+
+      // Score.
       const scoreText = this.add
         .text(GAME_WIDTH - 70, y, `${entry.score}`, {
           fontFamily: 'Arial Black',
-          fontSize: '30px',
+          fontSize: '32px',
           color: highlight ? COLORS_HEX.red : COLORS_HEX.yellow,
         })
         .setOrigin(1, 0.5);
 
-      this.listContainer.add([rankText, nameText, branchText, scoreText]);
-      y += 76;
+      this.listContainer.add([
+        rankText,
+        avatarCircle,
+        avatarInitial,
+        nameText,
+        scoreText,
+      ]);
+      y += rowH + 12;
     }
+  }
+
+  /** Derive a stable, vivid color from a string (for avatar circles). */
+  private colorFromString(value: string): number {
+    let hash = 0;
+    for (let i = 0; i < value.length; i += 1) {
+      hash = value.charCodeAt(i) + ((hash << 5) - hash);
+      hash |= 0;
+    }
+    const hue = Math.abs(hash) % 360;
+    const color = Phaser.Display.Color.HSVToRGB(hue / 360, 0.65, 0.85);
+    return (color as Phaser.Types.Display.ColorObject).color ?? COLORS.blue;
   }
 }

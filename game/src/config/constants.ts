@@ -51,4 +51,6 @@ export const REGISTRY = {
   lastResult: 'lastResult',
   publicConfig: 'publicConfig',
   nickname: 'nickname',
+  playerName: 'playerName',
+  playerPhone: 'playerPhone',
 } as const;

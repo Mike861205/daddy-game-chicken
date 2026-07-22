@@ -11,6 +11,7 @@ set -euo pipefail
 
 # 1. Move to the project directory.
 PROJECT_DIR="${PROJECT_DIR:-/var/www/daddy-game-chicken}"
+DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 cd "$PROJECT_DIR"
 
 echo "==> Deploying Daddy Game Chicken from $PROJECT_DIR"
@@ -22,8 +23,8 @@ if [ ! -f ".env" ]; then
 fi
 
 # 2. Pull the latest production code.
-echo "==> Pulling latest code (main)"
-git pull origin main
+echo "==> Pulling latest code ($DEPLOY_BRANCH)"
+git pull --ff-only origin "$DEPLOY_BRANCH"
 
 # 3. Install dependencies from the lockfile.
 echo "==> Installing dependencies (npm ci)"

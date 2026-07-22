@@ -49,4 +49,25 @@ const config: Phaser.Types.Core.GameConfig = {
   ],
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Keep pointer hit-testing aligned with the visually centered canvas.
+// Phaser's Scale Manager caches the canvas bounds and only recomputes them on
+// resize/scroll. Layout shifts that don't fire those events (e.g. the browser
+// bookmarks bar rendering, tab focus changes) can leave the cached bounds
+// stale, which makes buttons feel unresponsive until you move around or click
+// several times. Refresh the bounds on the relevant events and shortly after
+// the game boots so the first interactions register correctly.
+const refreshBounds = (): void => {
+  game.scale.refresh();
+};
+window.addEventListener('resize', refreshBounds);
+window.addEventListener('scroll', refreshBounds, true);
+window.addEventListener('orientationchange', refreshBounds);
+window.addEventListener('focus', refreshBounds);
+document.addEventListener('visibilitychange', refreshBounds);
+game.events.once('ready', () => {
+  refreshBounds();
+  window.setTimeout(refreshBounds, 100);
+  window.setTimeout(refreshBounds, 600);
+});

@@ -27,9 +27,8 @@ export interface PublicConfig {
 }
 
 const DEFAULT_BRANCHES: Branch[] = [
-  { id: 'lomas-del-sol', name: 'Daddy Lomas del Sol' },
-  { id: 'auroras', name: 'Daddy Auroras' },
-  { id: 'san-jose-del-cabo', name: 'Daddy San José del Cabo' },
+  { id: 'san-lucas', name: 'Daddy San Lucas' },
+  { id: 'san-jose', name: 'Daddy San José' },
 ];
 
 async function readConfig<T>(key: string, fallback: T): Promise<T> {
@@ -103,6 +102,25 @@ export async function getRewardExpiryHours(): Promise<number> {
     rewardExpiryHours: 168,
   });
   return promotions.rewardExpiryHours ?? 168;
+}
+
+/** Return the owner-editable contact and promotion settings. */
+export async function getAdminGameConfig(): Promise<{
+  businessPhone: string;
+  rewardExpiryHours: number;
+  tiers: PromotionTier[];
+}> {
+  const promotions = await readConfig('game.promotions', {
+    tiers: DEFAULT_PROMOTION_TIERS,
+    rewardExpiryHours: 168,
+  });
+  const contact = await readConfig('game.contact', { businessPhone: '6241548148' });
+
+  return {
+    businessPhone: contact.businessPhone,
+    rewardExpiryHours: promotions.rewardExpiryHours ?? 168,
+    tiers: promotions.tiers,
+  };
 }
 
 /**

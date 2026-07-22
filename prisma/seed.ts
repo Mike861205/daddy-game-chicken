@@ -28,9 +28,8 @@ const gameConfigurations: { key: string; value: unknown }[] = [
   {
     key: 'game.branches',
     value: [
-      { id: 'lomas-del-sol', name: 'Daddy Lomas del Sol' },
-      { id: 'auroras', name: 'Daddy Auroras' },
-      { id: 'san-jose-del-cabo', name: 'Daddy San José del Cabo' },
+      { id: 'san-lucas', name: 'Daddy San Lucas' },
+      { id: 'san-jose', name: 'Daddy San José' },
     ],
   },
   {

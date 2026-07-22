@@ -32,3 +32,18 @@ export const writeRateLimiter = rateLimit({
     },
   },
 });
+
+/** Protect the owner login from password guessing. */
+export const adminLoginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: {
+    error: {
+      code: 'TOO_MANY_REQUESTS',
+      message: 'Demasiados intentos de acceso. Espera 15 minutos.',
+    },
+  },
+});

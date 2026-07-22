@@ -3,8 +3,10 @@ import request from 'supertest';
 
 const prismaMock = {
   $queryRaw: vi.fn(),
+  $transaction: vi.fn(),
   gameConfiguration: {
     findUnique: vi.fn(),
+    upsert: vi.fn(),
   },
   gameSession: {
     findMany: vi.fn(),
@@ -21,6 +23,49 @@ const app = createApp();
 beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.gameConfiguration.findUnique.mockResolvedValue(null);
+  prismaMock.gameConfiguration.upsert.mockResolvedValue({});
+  prismaMock.$transaction.mockImplementation(async (operations) => Promise.all(operations));
+});
+
+describe('Super Admin', () => {
+  it('blocks configuration access without an owner session', async () => {
+    const response = await request(app).get('/api/admin/configuration');
+    expect(response.status).toBe(401);
+  });
+
+  it('rejects an incorrect owner password', async () => {
+    const response = await request(app).post('/api/admin/login').send({
+      username: 'mike',
+      password: 'incorrect-password',
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it('accepts the development owner credentials', async () => {
+    const response = await request(app).post('/api/admin/login').send({
+      username: 'mike',
+      password: 'development-admin-only',
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers['set-cookie']).toBeDefined();
+  });
+
+  it('keeps deployment disabled outside local development', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({
+      username: 'mike',
+      password: 'development-admin-only',
+    });
+
+    const status = await agent.get('/api/admin/deployment');
+    expect(status.status).toBe(200);
+    expect(status.body.data.enabled).toBe(false);
+
+    const start = await agent.post('/api/admin/deployment').send({
+      message: 'Should never run in tests',
+    });
+    expect(start.status).toBe(404);
+  });
 });
 
 describe('GET /api/health', () => {

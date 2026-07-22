@@ -16,7 +16,28 @@ export class InstructionsScene extends Phaser.Scene {
     bg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
     const cx = GAME_WIDTH / 2;
-    createTitle(this, cx, 140, 'CÓMO JUGAR', 48);
+    createTitle(this, cx, 120, 'CÓMO JUGAR', 48);
+
+    // Brief description of the game.
+    this.add
+      .text(
+        cx,
+        220,
+        'Controla a Daddy Pollo y atrapa los platillos que caen.\n' +
+          'Suma puntos con cada producto, haz combos y usa poderes.\n' +
+          'Evita lo quemado: ¡pierdes vidas! Tienes 60 segundos.',
+        {
+          fontFamily: 'Arial, sans-serif',
+          fontSize: '24px',
+          color: '#eaf1ff',
+          stroke: '#000000',
+          strokeThickness: 3,
+          align: 'center',
+          lineSpacing: 8,
+          wordWrap: { width: GAME_WIDTH - 80 },
+        },
+      )
+      .setOrigin(0.5);
 
     const steps: { icon: string; text: string }[] = [
       { icon: '👈👉', text: 'MUEVE AL DADDY' },
@@ -25,7 +46,7 @@ export class InstructionsScene extends Phaser.Scene {
       { icon: '🏆', text: 'CONSIGUE EL MAYOR PUNTAJE' },
     ];
 
-    let y = 320;
+    let y = 380;
     for (const step of steps) {
       const card = this.add.graphics();
       card.fillStyle(COLORS.blue, 0.85);

@@ -1,17 +1,17 @@
 # Audio del juego
 
-Carpeta reservada para archivos de audio (música y efectos).
+La música ambiental activa es `musica-fondo.mp3`.
 
-Actualmente el juego sintetiza efectos de sonido simples con la Web Audio API,
-por lo que no se requieren archivos para funcionar. Si deseas usar audio real,
-coloca aquí tus archivos (por ejemplo .mp3 u .ogg) y amplía el servicio de
-audio en `game/src/services/audio.ts`.
+Se reproduce en bucle, intenta iniciar al abrir el enlace y, cuando el
+navegador bloquea el autoplay, comienza con el primer clic o toque. El control
+SONIDO: SÍ/NO también pausa y reanuda la pista.
 
-Sugerencias de nombres:
-- musica-fondo.mp3
-- atrapar.mp3
-- error.mp3
-- combo.mp3
-- poder.mp3
-- cuenta-regresiva.mp3
-- celebracion.mp3
+Los efectos breves continúan generándose con Web Audio:
+
+- atrapar
+- error
+- combo
+- poder
+- cuenta regresiva
+- celebración
+- clic

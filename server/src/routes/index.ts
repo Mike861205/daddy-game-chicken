@@ -8,6 +8,7 @@ import {
   submitGameSession,
 } from '../controllers/gameSession.controller.js';
 import { createReward, validateReward } from '../controllers/reward.controller.js';
+import { lookupPlayer } from '../controllers/player.controller.js';
 
 const router = Router();
 
@@ -16,6 +17,9 @@ router.get('/health', asyncHandler(getHealth));
 
 // Public configuration
 router.get('/config/public', asyncHandler(getPublicConfiguration));
+
+// Players
+router.get('/players/lookup', asyncHandler(lookupPlayer));
 
 // Game sessions
 router.post('/game-sessions', writeRateLimiter, asyncHandler(submitGameSession));

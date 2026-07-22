@@ -6,6 +6,11 @@ export default defineConfig({
     port: 5173,
     // Proxy API calls to the backend during development.
     proxy: {
+      '/superadmin': {
+        target: 'http://localhost:5174',
+        changeOrigin: true,
+        ws: true,
+      },
       '/api': {
         target: 'http://localhost:3005',
         changeOrigin: true,

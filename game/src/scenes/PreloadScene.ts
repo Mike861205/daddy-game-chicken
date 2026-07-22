@@ -24,11 +24,12 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     const imageBase = 'assets/images';
+    const assetVersion = 'transparent-20260721';
     for (const item of ALL_ITEMS) {
-      this.load.image(item.key, `${imageBase}/${item.key}.png`);
+      this.load.image(item.key, `${imageBase}/${item.key}.png?v=${assetVersion}`);
     }
     for (const key of EXTRA_IMAGE_KEYS) {
-      this.load.image(key, `${imageBase}/${key}.png`);
+      this.load.image(key, `${imageBase}/${key}.png?v=${assetVersion}`);
     }
   }
 
@@ -43,6 +44,9 @@ export class PreloadScene extends Phaser.Scene {
     // Hide the HTML loading screen now that Phaser is ready.
     const loadingScreen = document.getElementById('loading-screen');
     loadingScreen?.classList.add('hidden');
+
+    // Recompute canvas bounds so pointer input aligns after the layout settles.
+    this.scale.refresh();
 
     this.scene.start(SCENES.Menu);
   }

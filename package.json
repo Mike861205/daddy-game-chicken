@@ -5,6 +5,7 @@
   "description": "Daddy Game Chicken: Atrapa el Sabor - videojuego web 2D para Daddy Pollo",
   "type": "module",
   "workspaces": [
+    "admin",
     "game",
     "server"
   ],
@@ -12,11 +13,13 @@
     "node": ">=18.0.0"
   },
   "scripts": {
-    "dev": "concurrently -n GAME,SERVER -c cyan,magenta \"npm run dev:game\" \"npm run dev:server\"",
+    "dev": "concurrently -n GAME,ADMIN,SERVER -c cyan,yellow,magenta \"npm run dev:game\" \"npm run dev:admin\" \"npm run dev:server\"",
     "dev:game": "npm run dev --workspace game",
+    "dev:admin": "npm run dev --workspace admin",
     "dev:server": "npm run dev --workspace server",
-    "build": "npm run build:server && npm run build:game",
+    "build": "npm run build:server && npm run build:game && npm run build:admin",
     "build:game": "npm run build --workspace game",
+    "build:admin": "npm run build --workspace admin",
     "build:server": "npm run build --workspace server",
     "lint": "npm run lint --workspace game && npm run lint --workspace server",
     "typecheck": "npm run typecheck --workspace game && npm run typecheck --workspace server",

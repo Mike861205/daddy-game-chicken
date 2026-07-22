@@ -53,6 +53,7 @@ describe('createRewardForSession', () => {
     prismaMock.gameSession.findUnique.mockResolvedValue({ id: 's3', score: 6000 });
     prismaMock.reward.findFirst.mockResolvedValue({
       code: 'DADDY-EXIST1',
+      label: 'PREMIO ESPECIAL',
       rewardType: 'SPECIAL',
       discountPercentage: null,
       expiresAt: new Date(),
@@ -76,6 +77,7 @@ describe('validateRewardCode', () => {
   it('marks an available, non-expired code as valid', async () => {
     prismaMock.reward.findUnique.mockResolvedValue({
       code: 'DADDY-VALID1',
+      label: '10% DE DESCUENTO',
       status: 'AVAILABLE',
       rewardType: 'DISCOUNT',
       discountPercentage: 10,
@@ -88,6 +90,7 @@ describe('validateRewardCode', () => {
   it('marks an expired code as invalid', async () => {
     prismaMock.reward.findUnique.mockResolvedValue({
       code: 'DADDY-OLD1',
+      label: '10% DE DESCUENTO',
       status: 'AVAILABLE',
       rewardType: 'DISCOUNT',
       discountPercentage: 10,

@@ -27,8 +27,8 @@ export function createApp(): Express {
         }
         callback(new Error('Origen no permitido por CORS.'));
       },
-      methods: ['GET', 'POST'],
-      credentials: false,
+      methods: ['GET', 'POST', 'PUT'],
+      credentials: true,
     }),
   );
 

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#050b20" />
+    <meta name="description" content="Panel privado de promociones de Daddy Game Chicken" />
+    <title>Super Admin · Daddy Game Chicken</title>
+  </head>
+  <body>
+    <div class="ambient ambient--one"></div>
+    <div class="ambient ambient--two"></div>
+
+    <main id="login-view" class="login-shell" hidden>
+      <section class="login-card" aria-labelledby="login-title">
+        <div class="brand-mark" aria-hidden="true">DP</div>
+        <p class="eyebrow">DADDY GAME CHICKEN</p>
+        <h1 id="login-title">Super Admin</h1>
+        <p class="login-copy">Configura premios y WhatsApp con acceso exclusivo del dueño.</p>
+        <form id="login-form" class="login-form">
+          <label for="username">Usuario</label>
+          <input id="username" name="username" type="text" autocomplete="username" required />
+          <label for="password">Contraseña administrativa</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" required />
+          <button class="button button--primary" type="submit">Entrar al panel</button>
+          <p id="login-error" class="form-message form-message--error" role="alert"></p>
+        </form>
+      </section>
+    </main>
+
+    <div id="admin-view" class="app-shell" hidden>
+      <header class="topbar">
+        <div class="topbar__brand">
+          <div class="brand-mark brand-mark--small" aria-hidden="true">DP</div>
+          <div>
+            <p class="eyebrow">DADDY GAME CHICKEN</p>
+            <h1>Super Admin</h1>
+          </div>
+        </div>
+        <div class="topbar__actions">
+          <span class="live-pill"><i></i> Configuración activa</span>
+          <button id="logout-button" class="button button--ghost" type="button">Cerrar sesión</button>
+        </div>
+      </header>
+
+      <main class="dashboard">
+        <section class="hero-panel">
+          <div>
+            <p class="eyebrow">CENTRO DE PREMIOS</p>
+            <h2>Convierte cada partida en una visita</h2>
+            <p>Define qué gana el jugador por sus puntos y recibe su solicitud de canje directamente en WhatsApp.</p>
+          </div>
+          <div class="hero-panel__signal" aria-hidden="true">
+            <span>⚡</span>
+            <strong>PREMIOS<br />EN VIVO</strong>
+          </div>
+        </section>
+
+        <form id="config-form">
+          <section class="panel contact-panel">
+            <div class="panel__heading">
+              <div class="panel__icon panel__icon--green">✆</div>
+              <div>
+                <p class="eyebrow">CONTACTO DE CANJE</p>
+                <h2>WhatsApp del negocio</h2>
+              </div>
+            </div>
+            <div class="field-grid">
+              <label class="field field--wide">
+                <span>Número que recibirá los premios</span>
+                <div class="phone-input"><b>WA</b><input id="business-phone" inputmode="numeric" autocomplete="tel" pattern="[0-9]{10,15}" required /></div>
+                <small>Escribe sólo números. Para México puedes usar los 10 dígitos; el juego agregará +52.</small>
+              </label>
+              <label class="field">
+                <span>Vigencia del premio</span>
+                <div class="suffix-input"><input id="reward-expiry" type="number" min="1" max="2160" required /><b>horas</b></div>
+                <small>168 horas equivalen a 7 días.</small>
+              </label>
+            </div>
+          </section>
+
+          <section class="panel rewards-panel">
+            <div class="panel__heading panel__heading--split">
+              <div class="heading-group">
+                <div class="panel__icon panel__icon--yellow">★</div>
+                <div>
+                  <p class="eyebrow">REGLAS DEL JUEGO</p>
+                  <h2>Premios por puntos</h2>
+                </div>
+              </div>
+              <button id="add-tier" class="button button--secondary" type="button">＋ Agregar premio</button>
+            </div>
+            <p class="section-help">Cada rango determina el mensaje y el premio que recibirá el jugador. Los rangos no deben cruzarse.</p>
+            <div id="tiers-list" class="tiers-list"></div>
+          </section>
+
+          <div class="save-bar">
+            <div>
+              <strong>Los cambios se aplican en las nuevas partidas</strong>
+              <span id="save-message" class="form-message" role="status"></span>
+            </div>
+            <button id="save-button" class="button button--primary button--save" type="submit">Guardar configuración</button>
+          </div>
+        </form>
+
+        <section id="deployment-panel" class="panel deployment-panel" hidden>
+          <div class="panel__heading panel__heading--split">
+            <div class="heading-group">
+              <div class="panel__icon panel__icon--deploy">â‡§</div>
+              <div>
+                <p class="eyebrow">DESPLIEGUE LOCAL SEGURO</p>
+                <h2>Push + Deploy a producciÃ³n</h2>
+              </div>
+            </div>
+            <span id="deployment-state" class="deployment-state">Listo</span>
+          </div>
+          <p class="section-help deployment-help">
+            Valida TypeScript, lint, pruebas y build; crea el commit, envÃ­a <code>main</code>
+            a GitHub y actualiza Liquid Web por SSH. Este mÃ³dulo sÃ³lo funciona en localhost.
+          </p>
+          <div class="deployment-controls">
+            <label class="field">
+              <span>Mensaje del commit</span>
+              <input id="deployment-message" maxlength="120" value="ActualizaciÃ³n de Daddy Game Chicken" />
+            </label>
+            <button id="deployment-button" class="button button--deploy" type="button">
+              Push + Deploy
+            </button>
+          </div>
+          <div class="deployment-summary">
+            <strong id="deployment-phase">Listo para desplegar</strong>
+            <span id="deployment-commit"></span>
+          </div>
+          <pre id="deployment-logs" class="deployment-logs" aria-live="polite">Sin ejecuciones todavÃ­a.</pre>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -34,8 +34,36 @@ export async function createGameSession(params: CreateGameSessionParams) {
     throw AppError.conflict('Esta partida ya fue registrada.');
   }
 
+  // Link or create a Player when a phone number is provided so that repeat
+  // players can be recognized across sessions.
+  let playerId: string | null = null;
+  if (params.phone) {
+    const player = await prisma.player.findFirst({
+      where: { phone: params.phone },
+      select: { id: true },
+    });
+    if (player) {
+      await prisma.player.update({
+        where: { id: player.id },
+        data: { nickname: params.nickname, ...(params.name ? { name: params.name } : {}) },
+      });
+      playerId = player.id;
+    } else {
+      const created = await prisma.player.create({
+        data: {
+          nickname: params.nickname,
+          phone: params.phone,
+          ...(params.name ? { name: params.name } : {}),
+        },
+        select: { id: true },
+      });
+      playerId = created.id;
+    }
+  }
+
   const session = await prisma.gameSession.create({
     data: {
+      playerId,
       nickname: params.nickname,
       score: params.score,
       selectedBranch: params.selectedBranch,

@@ -45,9 +45,8 @@ export const DEFAULT_CONFIG: PublicConfig = {
     combo5Multiplier: 3,
   },
   branches: [
-    { id: 'lomas-del-sol', name: 'Daddy Lomas del Sol' },
-    { id: 'auroras', name: 'Daddy Auroras' },
-    { id: 'san-jose-del-cabo', name: 'Daddy San José del Cabo' },
+    { id: 'san-lucas', name: 'Daddy San Lucas' },
+    { id: 'san-jose', name: 'Daddy San José' },
   ],
   promotions: [
     { minScore: 0, maxScore: 999, label: 'SIGUE INTENTANDO', rewardType: 'NONE', discountPercentage: null },
@@ -72,9 +71,13 @@ export const api = {
   async submitGameSession(
     result: GameResult,
     nickname: string,
+    phone?: string,
+    name?: string,
   ): Promise<SubmitResponse> {
     const body = {
       nickname,
+      ...(name ? { name } : {}),
+      ...(phone ? { phone } : {}),
       score: result.score,
       selectedBranch: result.selectedBranch,
       durationSeconds: result.durationSeconds,
@@ -106,6 +109,23 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ clientSessionId }),
       });
+      return response.data;
+    } catch {
+      return null;
+    }
+  },
+
+  /**
+   * Look up a returning player by phone number. Returns the stored name and
+   * avatar, or null when the phone is not registered.
+   */
+  async lookupPlayer(
+    phone: string,
+  ): Promise<{ name: string | null; avatar: string; phone: string | null } | null> {
+    try {
+      const response = await request<{
+        data: { name: string | null; avatar: string; phone: string | null };
+      }>(`/players/lookup?phone=${encodeURIComponent(phone)}`);
       return response.data;
     } catch {
       return null;

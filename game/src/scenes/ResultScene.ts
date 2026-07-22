@@ -89,9 +89,9 @@ export class ResultScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    // Nickname input (DOM element).
+    // Avatar input (DOM element).
     this.add
-      .text(cx, 500, 'Tu apodo:', {
+      .text(cx, 500, 'Tu avatar:', {
         fontFamily: 'Arial Black',
         fontSize: '24px',
         color: '#ffffff',
@@ -124,11 +124,11 @@ export class ResultScene extends Phaser.Scene {
     createButton(this, cx, 820, 'JUGAR OTRA VEZ', () => this.scene.start(SCENES.Game), {
       width: 420,
     });
-    createButton(this, cx - 110, 930, 'WHATSAPP', () => this.shareWhatsApp(), {
+    createButton(this, cx - 110, 930, 'ENVIAR PREMIO', () => this.shareWhatsApp(), {
       width: 200,
       fillColor: COLORS.green,
       textColor: '#ffffff',
-      fontSize: 24,
+      fontSize: 20,
     });
     createButton(this, cx + 110, 930, 'PROMOCIÓN', () => this.showPromotion(promo.label), {
       width: 200,
@@ -144,8 +144,9 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private createNicknameInput(x: number, y: number): void {
-    const existing = storage.getNickname();
-    const html = `<input type="text" maxlength="20" placeholder="Jugador" value="${this.escapeHtml(existing)}"
+    const existing =
+      (this.registry.get(REGISTRY.nickname) as string | undefined) ?? storage.getNickname();
+    const html = `<input type="text" maxlength="20" placeholder="Tu avatar" value="${this.escapeHtml(existing)}"
       style="width:380px;height:52px;font-size:26px;text-align:center;border-radius:12px;
       border:3px solid ${COLORS_HEX.yellow};font-family:'Arial Black',sans-serif;
       color:${COLORS_HEX.blue};outline:none;" />`;
@@ -178,11 +179,14 @@ export class ResultScene extends Phaser.Scene {
     }
     const nickname = this.getNickname();
     storage.setNickname(nickname);
+    this.registry.set(REGISTRY.nickname, nickname);
+    const phone = (this.registry.get(REGISTRY.playerPhone) as string | undefined) ?? undefined;
+    const name = (this.registry.get(REGISTRY.playerName) as string | undefined) ?? undefined;
     this.statusText.setColor(COLORS_HEX.white);
     this.statusText.setText('Guardando…');
 
     try {
-      const response = await api.submitGameSession(this.result, nickname);
+      const response = await api.submitGameSession(this.result, nickname, phone, name);
       this.saved = true;
       this.statusText.setColor(COLORS_HEX.neon);
       this.statusText.setText(`¡Guardado! Posición aprox: #${response.approximatePosition}`);
@@ -203,13 +207,29 @@ export class ResultScene extends Phaser.Scene {
   }
 
   private shareWhatsApp(): void {
-    const gameUrl = window.location.origin;
-    const phone = this.config?.contact.businessPhone ?? '6241548148';
-    const message =
-      `Obtuve ${this.result.score} puntos en Daddy Game Chicken. ` +
-      `¿Puedes superar mi récord? Juega aquí: ${gameUrl}`;
-    // Open a WhatsApp share link addressed to the business number.
-    const url = `https://wa.me/52${phone}?text=${encodeURIComponent(message)}`;
+    if (!this.saved) {
+      this.statusText.setColor(COLORS_HEX.yellow);
+      this.statusText.setText('Primero guarda tu puntaje para generar el premio.');
+      return;
+    }
+
+    const configuredPhone = this.config?.contact.businessPhone ?? '6241548148';
+    const destinationPhone = configuredPhone.length === 10 ? `52${configuredPhone}` : configuredPhone;
+    const playerName = (this.registry.get(REGISTRY.playerName) as string | undefined) ?? this.getNickname();
+    const playerPhone = (this.registry.get(REGISTRY.playerPhone) as string | undefined) ?? 'No registrado';
+    const promotion = resolvePromotion(this.result.score, this.config.promotions);
+    const prizeLabel = this.reward?.label ?? promotion.label;
+    const rewardCode = this.reward?.code ?? 'Sin código';
+    const message = [
+      'Hola Daddy Pollo 👋',
+      `Soy ${playerName}.`,
+      `Mi teléfono registrado es ${playerPhone}.`,
+      `Obtuve ${this.result.score} puntos en Daddy Game Chicken.`,
+      `Premio: ${prizeLabel}.`,
+      `Código de canje: ${rewardCode}.`,
+      'Quiero solicitar el canje de mi premio.',
+    ].join('\n');
+    const url = `https://wa.me/${destinationPhone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank', 'noopener');
   }
 

@@ -13,6 +13,7 @@ datasource db {
 
 model Player {
   id        String   @id @default(uuid()) @db.Uuid
+  name      String?
   nickname  String
   phone     String?
   createdAt DateTime @default(now())
@@ -21,6 +22,7 @@ model Player {
   sessions GameSession[]
 
   @@index([nickname])
+  @@index([phone])
   @@map("players")
 }
 
@@ -59,6 +61,7 @@ model Reward {
   id                 String       @id @default(uuid()) @db.Uuid
   gameSessionId      String       @db.Uuid
   code               String       @unique
+  label              String       @default("PROMOCIÓN DADDY POLLO")
   rewardType         String
   discountPercentage Int?
   status             RewardStatus @default(AVAILABLE)
