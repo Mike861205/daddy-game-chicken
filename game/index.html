@@ -12,10 +12,53 @@
   </head>
   <body>
     <div id="game-root">
-      <div id="loading-screen">
-        <div class="loading-logo">DADDY GAME CHICKEN</div>
-        <div class="loading-bar"><span></span></div>
-        <div class="loading-text">Cargando…</div>
+      <div id="loading-screen" role="status" aria-label="Cargando Daddy Game Chicken">
+        <div class="matrix-rain" aria-hidden="true">
+          <span>DADDY01</span><span>POLLO10</span><span>100101</span><span>FUEGO</span>
+          <span>COMBO</span><span>010011</span><span>SABOR</span><span>ARMA01</span>
+          <span>110010</span><span>DADDY</span><span>PREMIO</span><span>001101</span>
+          <span>CHICKEN</span><span>NEON10</span><span>101100</span><span>POWER</span>
+        </div>
+
+        <div class="intro-orbit intro-orbit--one" aria-hidden="true"></div>
+        <div class="intro-orbit intro-orbit--two" aria-hidden="true"></div>
+
+        <img
+          class="loading-brand"
+          src="/assets/images/logo-daddy-game-chicken.png"
+          alt="Daddy Pollo"
+        />
+        <div class="loading-kicker">ATRAPA EL SABOR</div>
+        <h1 class="loading-title" data-text="DADDY GAME CHICKEN">DADDY GAME CHICKEN</h1>
+        <p class="loading-subtitle">PREPARANDO LA MISIÓN</p>
+
+        <div class="intro-stage" aria-hidden="true">
+          <div class="speed-line speed-line--one"></div>
+          <div class="speed-line speed-line--two"></div>
+          <div class="speed-line speed-line--three"></div>
+          <div class="intro-runner">
+            <div class="runner-sprite"></div>
+            <img class="runner-weapon" src="/assets/images/arma-moderna.png" alt="" />
+            <i class="muzzle-flash"></i>
+          </div>
+          <div class="intro-explosion intro-explosion--one"><i></i><b>BOOM!</b></div>
+          <div class="intro-explosion intro-explosion--two"><i></i></div>
+        </div>
+
+        <img class="floating-icon floating-icon--fries" src="/assets/images/papas-con-pollo.png" alt="" />
+        <img class="floating-icon floating-icon--burger" src="/assets/images/hamburguesa-bbq.png" alt="" />
+        <img class="floating-icon floating-icon--trident" src="/assets/images/tridente-poseidon.png" alt="" />
+        <img class="floating-icon floating-icon--combo" src="/assets/images/combo-daddy.png" alt="" />
+
+        <div class="loading-progress-wrap">
+          <div class="loading-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <span></span><i></i>
+          </div>
+          <div class="loading-meta">
+            <span class="loading-text">ENERGIZANDO EL JUEGO</span>
+            <b class="loading-percent">0%</b>
+          </div>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

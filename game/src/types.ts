@@ -6,6 +6,7 @@ export interface Branch {
 }
 
 export interface PromotionTier {
+  levelName?: string;
   minScore: number;
   maxScore: number | null;
   label: string;
@@ -16,6 +17,7 @@ export interface PromotionTier {
 export interface PublicConfig {
   durationSeconds: number;
   startingLives: number;
+  difficultyLevel: number;
   scoring: {
     normalItemPoints: number;
     specialItemPoints: number;

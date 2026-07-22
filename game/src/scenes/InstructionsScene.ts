@@ -23,9 +23,9 @@ export class InstructionsScene extends Phaser.Scene {
       .text(
         cx,
         220,
-        'Controla a Daddy Pollo y atrapa los platillos que caen.\n' +
-          'Suma puntos con cada producto, haz combos y usa poderes.\n' +
-          'Evita lo quemado: ¡pierdes vidas! Tienes 60 segundos.',
+        'Corre con Daddy Pollo, atrapa platillos y consigue armas.\n' +
+          'Los enemigos patrullan y disparan fuego, cañón y agua.\n' +
+          'Dispárales o cúbrete: ¡cada enemigo tiene varias vidas!',
         {
           fontFamily: 'Arial, sans-serif',
           fontSize: '24px',
@@ -40,10 +40,10 @@ export class InstructionsScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const steps: { icon: string; text: string }[] = [
-      { icon: '👈👉', text: 'MUEVE AL DADDY' },
-      { icon: '🍗', text: 'ATRAPA LOS PLATILLOS' },
-      { icon: '🔥', text: 'ESQUIVA LO QUEMADO' },
-      { icon: '🏆', text: 'CONSIGUE EL MAYOR PUNTAJE' },
+      { icon: '👈👉', text: 'CORRE Y ESQUIVA' },
+      { icon: '⚔️', text: 'ATRAPA ARMAS' },
+      { icon: '🎯', text: 'DISPARA A LOS RIVALES' },
+      { icon: '🛡️', text: 'CÚBRETE DE SUS PODERES' },
     ];
 
     let y = 380;
@@ -73,7 +73,7 @@ export class InstructionsScene extends Phaser.Scene {
 
     // Extra tips.
     this.add
-      .text(cx, y + 20, 'Poderes: escudo, doble puntos, y más', {
+      .text(cx, y + 20, 'PC: FUEGO ESPACIO/F  •  CUBRIR S/SHIFT', {
         fontFamily: 'Arial, sans-serif',
         fontSize: '24px',
         color: '#21e6c1',

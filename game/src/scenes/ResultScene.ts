@@ -78,7 +78,16 @@ export class ResultScene extends Phaser.Scene {
     // Promotion.
     const promo = resolvePromotion(this.result.score, this.config.promotions);
     this.add
-      .text(cx, 430, promo.label, {
+      .text(cx, 410, promo.levelName.toUpperCase(), {
+        fontFamily: 'Arial Black',
+        fontSize: '22px',
+        color: COLORS_HEX.neon,
+        stroke: '#000000',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
+    this.add
+      .text(cx, 455, promo.label, {
         fontFamily: 'Arial Black',
         fontSize: '30px',
         color: COLORS_HEX.red,
@@ -225,6 +234,7 @@ export class ResultScene extends Phaser.Scene {
       `Soy ${playerName}.`,
       `Mi teléfono registrado es ${playerPhone}.`,
       `Obtuve ${this.result.score} puntos en Daddy Game Chicken.`,
+      `Nivel alcanzado: ${promotion.levelName}.`,
       `Premio: ${prizeLabel}.`,
       `Código de canje: ${rewardCode}.`,
       'Quiero solicitar el canje de mi premio.',

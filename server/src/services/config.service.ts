@@ -10,6 +10,7 @@ export interface Branch {
 export interface PublicConfig {
   durationSeconds: number;
   startingLives: number;
+  difficultyLevel: number;
   scoring: {
     normalItemPoints: number;
     specialItemPoints: number;
@@ -43,9 +44,7 @@ async function readConfig<T>(key: string, fallback: T): Promise<T> {
   return fallback;
 }
 
-/**
- * Build the public configuration served to the game client.
- */
+/** Build the public configuration served to the game client. */
 export async function getPublicConfig(): Promise<PublicConfig> {
   const duration = await readConfig('game.duration', { durationSeconds: 60, startingLives: 3 });
   const scoring = await readConfig('game.scoring', {
@@ -61,10 +60,12 @@ export async function getPublicConfig(): Promise<PublicConfig> {
     rewardExpiryHours: 168,
   });
   const contact = await readConfig('game.contact', { businessPhone: '6241548148' });
+  const difficulty = await readConfig('game.difficulty', { level: 5 });
 
   return {
     durationSeconds: duration.durationSeconds,
     startingLives: duration.startingLives,
+    difficultyLevel: normalizeDifficulty(difficulty.level),
     scoring: {
       normalItemPoints: scoring.normalItemPoints,
       specialItemPoints: scoring.specialItemPoints,
@@ -82,9 +83,7 @@ export async function getPublicConfig(): Promise<PublicConfig> {
   };
 }
 
-/**
- * Resolve promotion tiers from configuration (with fallback).
- */
+/** Resolve promotion tiers from configuration (with fallback). */
 export async function getPromotionTiers(): Promise<PromotionTier[]> {
   const promotions = await readConfig('game.promotions', {
     tiers: DEFAULT_PROMOTION_TIERS,
@@ -93,9 +92,7 @@ export async function getPromotionTiers(): Promise<PromotionTier[]> {
   return promotions.tiers;
 }
 
-/**
- * Resolve reward expiry window in hours.
- */
+/** Resolve reward expiry window in hours. */
 export async function getRewardExpiryHours(): Promise<number> {
   const promotions = await readConfig('game.promotions', {
     tiers: DEFAULT_PROMOTION_TIERS,
@@ -104,10 +101,11 @@ export async function getRewardExpiryHours(): Promise<number> {
   return promotions.rewardExpiryHours ?? 168;
 }
 
-/** Return the owner-editable contact and promotion settings. */
+/** Return the owner-editable contact, difficulty and promotion settings. */
 export async function getAdminGameConfig(): Promise<{
   businessPhone: string;
   rewardExpiryHours: number;
+  difficultyLevel: number;
   tiers: PromotionTier[];
 }> {
   const promotions = await readConfig('game.promotions', {
@@ -115,17 +113,17 @@ export async function getAdminGameConfig(): Promise<{
     rewardExpiryHours: 168,
   });
   const contact = await readConfig('game.contact', { businessPhone: '6241548148' });
+  const difficulty = await readConfig('game.difficulty', { level: 5 });
 
   return {
     businessPhone: contact.businessPhone,
     rewardExpiryHours: promotions.rewardExpiryHours ?? 168,
+    difficultyLevel: normalizeDifficulty(difficulty.level),
     tiers: promotions.tiers,
   };
 }
 
-/**
- * Resolve the server-side score validation configuration.
- */
+/** Resolve the server-side score validation configuration. */
 export async function getScoreValidationConfig(): Promise<ScoreValidationConfig> {
   const scoring = await readConfig('game.scoring', {
     maxScorePerSecond: DEFAULT_SCORE_CONFIG.maxScorePerSecond,
@@ -134,4 +132,9 @@ export async function getScoreValidationConfig(): Promise<ScoreValidationConfig>
     maxScorePerSecond: scoring.maxScorePerSecond ?? DEFAULT_SCORE_CONFIG.maxScorePerSecond,
     maxDurationSeconds: DEFAULT_SCORE_CONFIG.maxDurationSeconds,
   };
+}
+
+function normalizeDifficulty(level: unknown): number {
+  const numericLevel = typeof level === 'number' && Number.isFinite(level) ? level : 5;
+  return Math.max(0, Math.min(10, Math.round(numericLevel)));
 }

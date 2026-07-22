@@ -94,6 +94,26 @@ export class MenuScene extends Phaser.Scene {
     // Sound toggle.
     this.createSoundToggle(cx, 978);
 
+    const arsenalBadge = this.add
+      .text(cx, 1060, '⚔ NUEVO COMBATE: CORRE • DISPARA • CÚBRETE', {
+        fontFamily: 'Trebuchet MS, Arial, sans-serif',
+        fontSize: '17px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        stroke: '#06143a',
+        strokeThickness: 4,
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setShadow(0, 0, '#21e6c1', 8, true, true);
+    this.tweens.add({
+      targets: arsenalBadge,
+      alpha: { from: 0.62, to: 1 },
+      duration: 900,
+      yoyo: true,
+      repeat: -1,
+    });
+
     // Business contact footer.
     const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
     const phone = config?.contact.businessPhone ?? '6241548148';

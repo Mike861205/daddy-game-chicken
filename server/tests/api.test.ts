@@ -50,6 +50,55 @@ describe('Super Admin', () => {
     expect(response.headers['set-cookie']).toBeDefined();
   });
 
+  it('saves an owner-selected difficulty from 0 to 10', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({ username: 'mike', password: 'mike1986' });
+
+    const response = await agent.put('/api/admin/configuration').send({
+      businessPhone: '6241548148',
+      rewardExpiryHours: 168,
+      difficultyLevel: 8,
+      tiers: [
+        {
+          levelName: 'Nivel manual',
+          minScore: 0,
+          maxScore: null,
+          label: 'PREMIO DE PRUEBA',
+          rewardType: 'SPECIAL',
+          discountPercentage: null,
+        },
+      ],
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.difficultyLevel).toBe(8);
+    expect(response.body.data.tiers[0].levelName).toBe('Nivel manual');
+    expect(prismaMock.gameConfiguration.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: 'game.difficulty' } }),
+    );
+  });
+
+  it('rejects difficulty values outside the allowed scale', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({ username: 'mike', password: 'mike1986' });
+    const response = await agent.put('/api/admin/configuration').send({
+      businessPhone: '6241548148',
+      rewardExpiryHours: 168,
+      difficultyLevel: 11,
+      tiers: [
+        {
+          levelName: 'Nivel fuera de rango',
+          minScore: 0,
+          maxScore: null,
+          label: 'PREMIO DE PRUEBA',
+          rewardType: 'SPECIAL',
+          discountPercentage: null,
+        },
+      ],
+    });
+    expect(response.status).toBe(400);
+  });
+
   it('keeps deployment disabled outside local development', async () => {
     const agent = request.agent(app);
     await agent.post('/api/admin/login').send({
@@ -107,6 +156,7 @@ describe('GET /api/config/public', () => {
     const response = await request(app).get('/api/config/public');
     expect(response.status).toBe(200);
     expect(response.body.data.durationSeconds).toBe(60);
+    expect(response.body.data.difficultyLevel).toBe(5);
     expect(Array.isArray(response.body.data.branches)).toBe(true);
   });
 });

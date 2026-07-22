@@ -79,6 +79,31 @@
             </div>
           </section>
 
+          <section class="panel difficulty-panel">
+            <div class="panel__heading panel__heading--split">
+              <div class="heading-group">
+                <div class="panel__icon panel__icon--difficulty">10</div>
+                <div>
+                  <p class="eyebrow">DIFICULTAD Y PROBABILIDAD DE PREMIO</p>
+                  <h2>Qué tan fácil será sumar puntos</h2>
+                </div>
+              </div>
+              <strong id="difficulty-name" class="difficulty-name">5 · Normal</strong>
+            </div>
+            <p class="section-help">
+              Nivel 0 es el más fácil y ayuda a alcanzar los premios; nivel 10 aumenta enemigos,
+              velocidad y reduce los puntos obtenidos. Los rangos de premio de abajo siguen siendo editables.
+            </p>
+            <div class="difficulty-control">
+              <div class="difficulty-scale" aria-hidden="true"><span>0 · Muy fácil</span><span>5 · Normal</span><span>10 · Extrema</span></div>
+              <input id="difficulty-level" type="range" min="0" max="10" step="1" value="5" aria-label="Nivel de dificultad del juego" />
+              <div class="difficulty-output">
+                <label class="field"><span>Nivel exacto</span><input id="difficulty-number" type="number" min="0" max="10" step="1" value="5" required /></label>
+                <div id="difficulty-effects" class="difficulty-effects"></div>
+              </div>
+            </div>
+          </section>
+
           <section class="panel rewards-panel">
             <div class="panel__heading panel__heading--split">
               <div class="heading-group">
@@ -88,9 +113,9 @@
                   <h2>Premios por puntos</h2>
                 </div>
               </div>
-              <button id="add-tier" class="button button--secondary" type="button">＋ Agregar premio</button>
+              <button id="add-tier" class="button button--secondary" type="button">＋ Agregar nivel</button>
             </div>
-            <p class="section-help">Cada rango determina el mensaje y el premio que recibirá el jugador. Los rangos no deben cruzarse.</p>
+            <p class="section-help">Agrega, elimina y nombra cada nivel manualmente. Cada rango determina el premio; los puntos no deben cruzarse.</p>
             <div id="tiers-list" class="tiers-list"></div>
           </section>
 

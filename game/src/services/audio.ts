@@ -1,6 +1,16 @@
 import { storage } from './storage.js';
 
-type SoundName = 'catch' | 'error' | 'combo' | 'power' | 'countdown' | 'win' | 'click';
+type SoundName =
+  | 'catch'
+  | 'error'
+  | 'combo'
+  | 'power'
+  | 'countdown'
+  | 'win'
+  | 'click'
+  | 'shot'
+  | 'blast'
+  | 'enemy';
 
 /**
  * Lightweight audio manager using the Web Audio API to synthesize simple
@@ -86,6 +96,9 @@ class AudioManager {
       countdown: { freq: 700, type: 'square', duration: 0.1 },
       win: { freq: 523, type: 'sine', duration: 0.5, sweep: 1046 },
       click: { freq: 400, type: 'sine', duration: 0.06 },
+      shot: { freq: 820, type: 'square', duration: 0.08, sweep: 360 },
+      blast: { freq: 180, type: 'sawtooth', duration: 0.2, sweep: 70 },
+      enemy: { freq: 260, type: 'triangle', duration: 0.16, sweep: 520 },
     };
     const preset = presets[name];
     this.tone(preset.freq, preset.type, preset.duration, preset.sweep);

@@ -6,6 +6,7 @@ import { getAdminGameConfig } from './config.service.js';
 export interface AdminGameConfig {
   businessPhone: string;
   rewardExpiryHours: number;
+  difficultyLevel: number;
   tiers: PromotionTier[];
 }
 
@@ -33,6 +34,11 @@ export async function saveAdminGameConfig(config: AdminGameConfig): Promise<Admi
         key: 'game.promotions',
         value: promotionsValue,
       },
+    }),
+    prisma.gameConfiguration.upsert({
+      where: { key: 'game.difficulty' },
+      update: { value: { level: config.difficultyLevel } },
+      create: { key: 'game.difficulty', value: { level: config.difficultyLevel } },
     }),
   ]);
 

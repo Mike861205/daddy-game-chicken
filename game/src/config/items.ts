@@ -3,9 +3,11 @@
  * `key` is used both as the texture key and the placeholder identifier.
  */
 
-export type ItemCategory = 'good' | 'bad' | 'power';
+export type ItemCategory = 'good' | 'bad' | 'power' | 'weapon';
 
 export type PowerType = 'shield' | 'double' | 'slow' | 'magnet' | 'combo';
+
+export type WeaponType = 'modern' | 'historic' | 'poseidon';
 
 export interface ItemDefinition {
   key: string;
@@ -17,6 +19,8 @@ export interface ItemDefinition {
   special?: boolean;
   /** Power type for power-ups. */
   power?: PowerType;
+  /** Weapon type for arsenal pickups. */
+  weapon?: WeaponType;
   /** Placeholder fill color when the image is missing. */
   color: number;
   /** Relative spawn weight. */
@@ -53,7 +57,43 @@ export const POWER_ITEMS: ItemDefinition[] = [
   { key: 'combo-daddy', label: 'Combo Daddy', category: 'power', power: 'combo', color: 0xffd21e, weight: 1 },
 ];
 
-export const ALL_ITEMS: ItemDefinition[] = [...GOOD_ITEMS, ...BAD_ITEMS, ...POWER_ITEMS];
+/**
+ * Arsenal pickups are spawned on their own cadence so every 60-second match
+ * gives the player a chance to try all three weapon families.
+ */
+export const WEAPON_ITEMS: ItemDefinition[] = [
+  {
+    key: 'arma-moderna',
+    label: 'Bláster moderno',
+    category: 'weapon',
+    weapon: 'modern',
+    color: 0x43d9ff,
+    weight: 1,
+  },
+  {
+    key: 'arma-historica',
+    label: 'Cañón histórico',
+    category: 'weapon',
+    weapon: 'historic',
+    color: 0xffb347,
+    weight: 1,
+  },
+  {
+    key: 'tridente-poseidon',
+    label: 'Tridente de Poseidón',
+    category: 'weapon',
+    weapon: 'poseidon',
+    color: 0x21e6e6,
+    weight: 1,
+  },
+];
+
+export const ALL_ITEMS: ItemDefinition[] = [
+  ...GOOD_ITEMS,
+  ...BAD_ITEMS,
+  ...POWER_ITEMS,
+  ...WEAPON_ITEMS,
+];
 
 /**
  * Extra image keys that are not falling items (backgrounds, logo, player).

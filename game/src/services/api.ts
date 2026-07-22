@@ -38,6 +38,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const DEFAULT_CONFIG: PublicConfig = {
   durationSeconds: 60,
   startingLives: 3,
+  difficultyLevel: 5,
   scoring: {
     normalItemPoints: 100,
     specialItemPoints: 200,
@@ -49,10 +50,10 @@ export const DEFAULT_CONFIG: PublicConfig = {
     { id: 'san-jose', name: 'Daddy San José' },
   ],
   promotions: [
-    { minScore: 0, maxScore: 999, label: 'SIGUE INTENTANDO', rewardType: 'NONE', discountPercentage: null },
-    { minScore: 1000, maxScore: 2499, label: 'GANASTE 5% DE DESCUENTO', rewardType: 'DISCOUNT', discountPercentage: 5 },
-    { minScore: 2500, maxScore: 4999, label: 'GANASTE 10% DE DESCUENTO', rewardType: 'DISCOUNT', discountPercentage: 10 },
-    { minScore: 5000, maxScore: null, label: 'GANASTE UNA PROMOCIÓN ESPECIAL', rewardType: 'SPECIAL', discountPercentage: null },
+    { levelName: 'Principiante', minScore: 0, maxScore: 999, label: 'SIGUE INTENTANDO', rewardType: 'NONE', discountPercentage: null },
+    { levelName: 'Bronce', minScore: 1000, maxScore: 2499, label: 'GANASTE 5% DE DESCUENTO', rewardType: 'DISCOUNT', discountPercentage: 5 },
+    { levelName: 'Plata', minScore: 2500, maxScore: 4999, label: 'GANASTE 10% DE DESCUENTO', rewardType: 'DISCOUNT', discountPercentage: 10 },
+    { levelName: 'Daddy Supremo', minScore: 5000, maxScore: null, label: 'GANASTE UNA PROMOCIÓN ESPECIAL', rewardType: 'SPECIAL', discountPercentage: null },
   ],
   scoreLimits: { maxScorePerSecond: 500 },
   contact: { businessPhone: '6241548148' },

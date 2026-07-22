@@ -15,6 +15,7 @@ const loginSchema = z.object({
 });
 
 const tierSchema = z.object({
+  levelName: z.string().trim().min(1).max(40),
   minScore: z.number().int().min(0).max(10_000_000),
   maxScore: z.number().int().min(0).max(10_000_000).nullable(),
   label: z.string().trim().min(3).max(120),
@@ -26,6 +27,7 @@ const configSchema = z
   .object({
     businessPhone: z.string().trim().regex(/^\d{10,15}$/u, 'Usa sólo números, incluyendo lada.'),
     rewardExpiryHours: z.number().int().min(1).max(2160),
+    difficultyLevel: z.number().int().min(0).max(10),
     tiers: z.array(tierSchema).min(1).max(12),
   })
   .superRefine((value, ctx) => {

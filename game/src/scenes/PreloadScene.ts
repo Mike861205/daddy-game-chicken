@@ -1,30 +1,41 @@
 import Phaser from 'phaser';
-import { COLORS, GAME_HEIGHT, GAME_WIDTH, REGISTRY, SCENES } from '../config/constants.js';
+import { REGISTRY, SCENES } from '../config/constants.js';
 import { ALL_ITEMS, EXTRA_IMAGE_KEYS } from '../config/items.js';
 import { generatePlaceholderTextures } from '../utils/placeholders.js';
 import { api } from '../services/api.js';
 
 /**
- * PreloadScene: loads assets with a visible progress bar, then generates
- * placeholder textures for any missing images and fetches public config.
+ * Loads game assets behind a six-second branded cinematic intro.
  */
 export class PreloadScene extends Phaser.Scene {
+  private static readonly INTRO_DURATION_MS = 6000;
+  private introStartedAt = 0;
+  private progressAnimationFrame = 0;
+
   constructor() {
     super(SCENES.Preload);
   }
 
   preload(): void {
-    this.buildProgressBar();
+    this.introStartedAt = performance.now();
+    this.animateHtmlProgress();
 
-    // Attempt to load real images. Missing files are tolerated: Phaser emits
-    // a load error which we catch, and placeholders are generated afterwards.
     this.load.on('loaderror', (file: Phaser.Loader.File) => {
-      // Silently ignore missing optional assets.
       console.warn(`Asset opcional no encontrado: ${file.key}`);
     });
 
     const imageBase = 'assets/images';
-    const assetVersion = 'transparent-20260721';
+    const assetVersion = 'neon-intro-20260722';
+    this.load.spritesheet(
+      'daddy-pollo-anim',
+      `${imageBase}/daddy-pollo-anim.png?v=${assetVersion}`,
+      { frameWidth: 512, frameHeight: 512 },
+    );
+    this.load.spritesheet(
+      'enemigos-anim',
+      `${imageBase}/enemigos-anim.png?v=${assetVersion}`,
+      { frameWidth: 512, frameHeight: 512 },
+    );
     for (const item of ALL_ITEMS) {
       this.load.image(item.key, `${imageBase}/${item.key}.png?v=${assetVersion}`);
     }
@@ -34,66 +45,58 @@ export class PreloadScene extends Phaser.Scene {
   }
 
   async create(): Promise<void> {
-    // Generate placeholders for any image that did not load.
     generatePlaceholderTextures(this);
 
-    // Fetch public configuration (falls back to defaults if offline).
     const config = await api.getPublicConfig();
     this.registry.set(REGISTRY.publicConfig, config);
 
-    // Hide the HTML loading screen now that Phaser is ready.
+    const elapsed = performance.now() - this.introStartedAt;
+    const remaining = Math.max(0, PreloadScene.INTRO_DURATION_MS - elapsed);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, remaining));
+    window.cancelAnimationFrame(this.progressAnimationFrame);
+    this.updateHtmlProgress(1);
+
     const loadingScreen = document.getElementById('loading-screen');
     loadingScreen?.classList.add('hidden');
+    window.setTimeout(() => loadingScreen?.remove(), 650);
 
-    // Recompute canvas bounds so pointer input aligns after the layout settles.
     this.scale.refresh();
-
     this.scene.start(SCENES.Menu);
   }
 
-  private buildProgressBar(): void {
-    const cx = GAME_WIDTH / 2;
-    const cy = GAME_HEIGHT / 2;
+  private animateHtmlProgress(): void {
+    const tick = (): void => {
+      const elapsed = performance.now() - this.introStartedAt;
+      const progress = Phaser.Math.Clamp(elapsed / PreloadScene.INTRO_DURATION_MS, 0, 1);
+      this.updateHtmlProgress(progress);
+      if (progress < 1) {
+        this.progressAnimationFrame = window.requestAnimationFrame(tick);
+      }
+    };
+    tick();
+  }
 
-    this.add
-      .text(cx, cy - 120, 'DADDY GAME CHICKEN', {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '44px',
-        color: '#ffd21e',
-        stroke: '#000000',
-        strokeThickness: 6,
-        align: 'center',
-      })
-      .setOrigin(0.5);
-
-    const barWidth = 460;
-    const barHeight = 40;
-    const box = this.add.graphics();
-    box.lineStyle(4, COLORS.yellow, 1);
-    box.strokeRoundedRect(cx - barWidth / 2, cy - barHeight / 2, barWidth, barHeight, 12);
-
-    const bar = this.add.graphics();
-    const label = this.add
-      .text(cx, cy + 60, 'Cargando… 0%', {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '26px',
-        color: '#ffffff',
-        stroke: '#000000',
-        strokeThickness: 4,
-      })
-      .setOrigin(0.5);
-
-    this.load.on('progress', (value: number) => {
-      bar.clear();
-      bar.fillStyle(COLORS.neon, 1);
-      bar.fillRoundedRect(
-        cx - barWidth / 2 + 6,
-        cy - barHeight / 2 + 6,
-        (barWidth - 12) * value,
-        barHeight - 12,
-        8,
-      );
-      label.setText(`Cargando… ${Math.round(value * 100)}%`);
-    });
+  private updateHtmlProgress(progress: number): void {
+    const percentage = Math.round(progress * 100);
+    const bar = document.querySelector<HTMLElement>('.loading-bar');
+    const fill = document.querySelector<HTMLElement>('.loading-bar > span');
+    const percent = document.querySelector<HTMLElement>('.loading-percent');
+    const label = document.querySelector<HTMLElement>('.loading-text');
+    fill?.style.setProperty('--loading-progress', `${percentage}%`);
+    bar?.setAttribute('aria-valuenow', String(percentage));
+    if (percent) {
+      percent.textContent = `${percentage}%`;
+    }
+    if (label) {
+      label.textContent = progress < 0.22
+        ? 'ENCENDIENDO EL NEÓN'
+        : progress < 0.48
+          ? 'CARGANDO EL ARSENAL'
+          : progress < 0.74
+            ? 'ACTIVANDO PODERES'
+            : progress < 0.96
+              ? 'ABRIENDO LA ARENA'
+              : '¡TODO LISTO!';
+    }
   }
 }

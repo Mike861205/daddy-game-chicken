@@ -1,6 +1,7 @@
 import type { PromotionTier } from '../types.js';
 
 export interface PromotionOutcome {
+  levelName: string;
   label: string;
   rewardType: 'NONE' | 'DISCOUNT' | 'SPECIAL';
   discountPercentage: number | null;
@@ -12,13 +13,14 @@ export interface PromotionOutcome {
  */
 export function resolvePromotion(score: number, tiers: PromotionTier[]): PromotionOutcome {
   const safeScore = Number.isFinite(score) && score > 0 ? Math.floor(score) : 0;
-  const matched = tiers.find((tier) => {
+  const matchedIndex = tiers.findIndex((tier) => {
     const aboveMin = safeScore >= tier.minScore;
     const belowMax = tier.maxScore === null ? true : safeScore <= tier.maxScore;
     return aboveMin && belowMax;
   });
-  const tier = matched ?? tiers[0];
+  const tier = matchedIndex >= 0 ? tiers[matchedIndex] : tiers[0];
   return {
+    levelName: tier?.levelName?.trim() || `Nivel ${matchedIndex >= 0 ? matchedIndex + 1 : 1}`,
     label: tier?.label ?? 'SIGUE INTENTANDO',
     rewardType: tier?.rewardType ?? 'NONE',
     discountPercentage: tier?.discountPercentage ?? null,

@@ -3,6 +3,7 @@ import './styles.css';
 type RewardType = 'NONE' | 'DISCOUNT' | 'SPECIAL';
 
 interface PromotionTier {
+  levelName: string;
   minScore: number;
   maxScore: number | null;
   label: string;
@@ -13,6 +14,7 @@ interface PromotionTier {
 interface AdminConfig {
   businessPhone: string;
   rewardExpiryHours: number;
+  difficultyLevel: number;
   tiers: PromotionTier[];
 }
 
@@ -36,6 +38,10 @@ const tiersList = required<HTMLElement>('tiers-list');
 const loginError = required<HTMLElement>('login-error');
 const saveMessage = required<HTMLElement>('save-message');
 const saveButton = required<HTMLButtonElement>('save-button');
+const difficultyLevel = required<HTMLInputElement>('difficulty-level');
+const difficultyNumber = required<HTMLInputElement>('difficulty-number');
+const difficultyName = required<HTMLElement>('difficulty-name');
+const difficultyEffects = required<HTMLElement>('difficulty-effects');
 const deploymentPanel = required<HTMLElement>('deployment-panel');
 const deploymentButton = required<HTMLButtonElement>('deployment-button');
 const deploymentMessage = required<HTMLInputElement>('deployment-message');
@@ -80,8 +86,33 @@ async function showAdmin(): Promise<void> {
   currentConfig = await api<AdminConfig>('/configuration');
   required<HTMLInputElement>('business-phone').value = currentConfig.businessPhone;
   required<HTMLInputElement>('reward-expiry').value = String(currentConfig.rewardExpiryHours);
+  setDifficulty(currentConfig.difficultyLevel);
   renderTiers();
   await loadDeploymentModule();
+}
+
+function difficultyLabel(level: number): string {
+  if (level <= 1) return 'Muy fácil';
+  if (level <= 3) return 'Fácil';
+  if (level <= 6) return 'Normal';
+  if (level <= 8) return 'Difícil';
+  return 'Extrema';
+}
+
+function setDifficulty(rawLevel: number): void {
+  const level = Math.max(0, Math.min(10, Math.round(rawLevel)));
+  difficultyLevel.value = String(level);
+  difficultyNumber.value = String(level);
+  difficultyName.textContent = `${level} · ${difficultyLabel(level)}`;
+
+  const offset = (level - 5) / 5;
+  const scorePercent = Math.round((1 - 0.2 * offset) * 100);
+  const speedPercent = Math.round((1 + 0.28 * offset) * 100);
+  const enemyFrequencyPercent = Math.round((1 / (1 - 0.35 * offset)) * 100);
+  difficultyEffects.innerHTML = `
+    <span><b>${scorePercent}%</b> de puntos</span>
+    <span><b>${speedPercent}%</b> de velocidad</span>
+    <span><b>${enemyFrequencyPercent}%</b> de frecuencia rival</span>`;
 }
 
 function stopDeploymentPolling(): void {
@@ -155,7 +186,10 @@ function renderTiers(): void {
       <div class="tier-card__number"><span>${index + 1}</span></div>
       <div class="tier-card__content">
         <div class="tier-card__topline">
-          <strong>Nivel ${index + 1}</strong>
+          <label class="tier-name-field">
+            <span>Nombre del nivel</span>
+            <input data-field="levelName" maxlength="40" value="${escapeHtml(tier.levelName ?? `Nivel ${index + 1}`)}" required />
+          </label>
           <button class="icon-button remove-tier" type="button" aria-label="Eliminar nivel ${index + 1}" ${currentConfig!.tiers.length === 1 ? 'disabled' : ''}>×</button>
         </div>
         <div class="tier-grid">
@@ -189,6 +223,7 @@ function readTierCards(): PromotionTier[] {
     const maxScore = value('maxScore');
     const discount = value('discountPercentage');
     return {
+      levelName: value('levelName'),
       minScore: Number(value('minScore')),
       maxScore: maxScore === '' ? null : Number(maxScore),
       label: value('label'),
@@ -205,6 +240,7 @@ function addTier(): void {
   const minScore = last ? (last.maxScore ?? last.minScore + 999) + 1 : 0;
   if (last?.maxScore === null) last.maxScore = minScore - 1;
   currentConfig.tiers.push({
+    levelName: `Nivel ${currentConfig.tiers.length + 1}`,
     minScore,
     maxScore: null,
     label: 'NUEVO PREMIO DADDY POLLO',
@@ -249,6 +285,7 @@ configForm.addEventListener('submit', async (event) => {
   const config: AdminConfig = {
     businessPhone: required<HTMLInputElement>('business-phone').value.replace(/\D/gu, ''),
     rewardExpiryHours: Number(required<HTMLInputElement>('reward-expiry').value),
+    difficultyLevel: Number(difficultyNumber.value),
     tiers: readTierCards(),
   };
 
@@ -266,6 +303,8 @@ configForm.addEventListener('submit', async (event) => {
 });
 
 required<HTMLButtonElement>('add-tier').addEventListener('click', addTier);
+difficultyLevel.addEventListener('input', () => setDifficulty(Number(difficultyLevel.value)));
+difficultyNumber.addEventListener('input', () => setDifficulty(Number(difficultyNumber.value)));
 deploymentButton.addEventListener('click', async () => {
   const message = deploymentMessage.value.trim();
   if (message.length < 3) {

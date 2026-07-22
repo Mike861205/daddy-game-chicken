@@ -2,6 +2,22 @@ import { defineConfig } from 'vite';
 
 // Vite configuration for the Phaser game client.
 export default defineConfig({
+  plugins: [
+    {
+      name: 'superadmin-trailing-slash',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url === '/superadmin') {
+            res.statusCode = 308;
+            res.setHeader('Location', '/superadmin/');
+            res.end();
+            return;
+          }
+          next();
+        });
+      },
+    },
+  ],
   server: {
     port: 5173,
     // Proxy API calls to the backend during development.
