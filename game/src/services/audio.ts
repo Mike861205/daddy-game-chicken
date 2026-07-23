@@ -25,19 +25,25 @@ class AudioManager {
   private readonly music: HTMLAudioElement;
   private playbackRequest = 0;
   private enabled: boolean;
+  private firstGestureBound = false;
 
   constructor() {
     this.enabled = storage.getSoundEnabled();
     this.music = new Audio('/assets/audio/musica-fondo.mp3?v=20260721');
     this.music.loop = true;
+    this.music.autoplay = this.enabled;
     this.music.preload = 'auto';
     this.music.volume = 0.28;
+    this.music.setAttribute('playsinline', '');
 
     // Browsers that permit autoplay start immediately. When autoplay is
-    // blocked, unlock() retries after the visitor's first click or touch.
+    // blocked, any first interaction (including during the loading cinematic)
+    // unlocks it automatically. The visitor never has to press the sound
+    // preference button just to begin playback.
     if (this.enabled) {
       this.startMusic();
     }
+    this.bindFirstGestureUnlock();
 
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && this.enabled) {
@@ -82,6 +88,33 @@ class AudioManager {
   toggle(): boolean {
     this.setEnabled(!this.enabled);
     return this.enabled;
+  }
+
+  private bindFirstGestureUnlock(): void {
+    if (this.firstGestureBound) {
+      return;
+    }
+    this.firstGestureBound = true;
+
+    const unlockFromGesture = (): void => {
+      document.removeEventListener('pointerdown', unlockFromGesture, true);
+      document.removeEventListener('touchstart', unlockFromGesture, true);
+      document.removeEventListener('keydown', unlockFromGesture, true);
+      this.firstGestureBound = false;
+      this.unlock();
+    };
+
+    // Capture phase ensures the audio permission is obtained before Phaser or
+    // a form consumes the same interaction.
+    document.addEventListener('pointerdown', unlockFromGesture, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener('touchstart', unlockFromGesture, {
+      capture: true,
+      passive: true,
+    });
+    document.addEventListener('keydown', unlockFromGesture, true);
   }
 
   play(name: SoundName): void {

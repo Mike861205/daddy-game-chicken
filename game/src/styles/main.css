@@ -442,62 +442,23 @@ body {
 .runner-sprite {
   position: absolute;
   inset: 0;
-  background-image: url('/assets/images/daddy-pollo-anim.png');
+  background-image: url('/assets/images/daddy-pollo-armed-anim.png');
   background-repeat: no-repeat;
   background-size: 300% 200%;
   background-position: 100% 0;
   filter:
     drop-shadow(0 8px 4px rgba(0, 0, 0, 0.52))
     drop-shadow(0 0 8px rgba(255, 210, 30, 0.46));
-  animation: runner-frames 0.2s steps(1) infinite;
-}
-
-.runner-gun {
-  position: absolute;
-  z-index: 7;
-  top: 18%;
-  left: 59%;
-  width: 35%;
-  aspect-ratio: 1;
-  transform-origin: 28% 78%;
-  animation: gun-hand-track 0.2s steps(1) infinite;
-  will-change: top, left;
-}
-
-.runner-weapon {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  transform: rotate(-8deg);
-  transform-origin: 28% 78%;
-  filter: drop-shadow(0 0 7px #43d9ff);
-  animation: weapon-recoil 0.75s ease-out infinite;
-}
-
-.muzzle-flash {
-  position: absolute;
-  z-index: 8;
-  top: 28%;
-  left: 86%;
-  width: 25px;
-  height: 25px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow:
-    0 0 8px #fff,
-    0 0 18px var(--daddy-yellow),
-    16px 0 24px var(--daddy-red);
-  clip-path: polygon(0 40%, 100% 0, 67% 50%, 100% 100%, 0 60%);
-  animation: muzzle-burst 0.75s steps(1) infinite;
+  animation:
+    runner-frames 0.72s steps(1) infinite,
+    runner-gait 0.36s ease-in-out infinite;
 }
 
 .intro-shot {
   position: absolute;
   z-index: 9;
-  top: 32%;
-  left: 92%;
+  top: 35%;
+  left: 86%;
   width: 28px;
   height: 5px;
   border-radius: 999px;
@@ -665,7 +626,16 @@ body {
 @keyframes brand-pulse { 50% { transform: translateX(-50%) scale(1.045); filter: drop-shadow(0 0 18px var(--daddy-yellow)) drop-shadow(0 0 32px var(--daddy-red)); } }
 @keyframes neon-flicker { 0%, 18%, 22%, 63%, 100% { opacity: 1; } 20%, 64% { opacity: .72; } 21% { opacity: .94; } }
 @keyframes title-glitch { 0%, 88%, 100% { translate: 0; } 89% { translate: 8px -2px; } 92% { translate: -7px 2px; } }
-@keyframes runner-frames { 0%, 49.9% { background-position: 100% 0; } 50%, 100% { background-position: 0 100%; } }
+@keyframes runner-frames {
+  0%, 34% { background-position: 100% 0; }
+  35%, 68% { background-position: 0 100%; }
+  69%, 82% { background-position: 50% 100%; }
+  83%, 100% { background-position: 0 100%; }
+}
+@keyframes runner-gait {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-1deg); }
+  50% { transform: translate3d(0, -7px, 0) rotate(1deg); }
+}
 @keyframes boss-intro-movement-right {
   0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(-2deg); }
   50% { transform: translate3d(-8px, -9px, 0) scale(0.96) rotate(2deg); }
@@ -673,10 +643,6 @@ body {
 @keyframes boss-intro-movement-left {
   0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(2deg); }
   50% { transform: translate3d(8px, -9px, 0) scale(0.96) rotate(-2deg); }
-}
-@keyframes gun-hand-track {
-  0%, 49.9% { top: 18%; left: 59%; }
-  50%, 100% { top: 0%; left: 69%; }
 }
 @keyframes intro-shot-flight {
   0%, 12% { opacity: 0; transform: translate3d(0, 0, 0) scaleX(0.2); }
@@ -688,8 +654,6 @@ body {
   0% { opacity: 0.9; transform: translate(-50%, -50%) scale(0.78); }
   100% { opacity: 0; transform: translate(-50%, -50%) scale(1.18); }
 }
-@keyframes weapon-recoil { 0%, 72%, 100% { transform: rotate(-8deg) translateX(0); } 76% { transform: rotate(-14deg) translateX(-9px); } }
-@keyframes muzzle-burst { 0%, 73%, 83%, 100% { opacity: 0; transform: scale(.2); } 75%, 79% { opacity: 1; transform: scale(1.25); } }
 @keyframes speed-lines { from { transform: translateX(40px) scaleX(.2); opacity: 0; } 35% { opacity: 1; } to { transform: translateX(-380px) scaleX(1); opacity: 0; } }
 @keyframes intro-explode { 0%, 37%, 100% { opacity: 0; transform: scale(.1) rotate(0); } 42% { opacity: 1; transform: scale(.55) rotate(20deg); } 58% { opacity: 1; transform: scale(1.2) rotate(55deg); } 76% { opacity: 0; transform: scale(1.8) rotate(90deg); } }
 @keyframes icon-float { 50% { translate: 0 -18px; rotate: 8deg; scale: 1.08; } }

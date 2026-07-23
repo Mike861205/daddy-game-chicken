@@ -102,6 +102,7 @@ export function createButton(
     scene.tweens.killTweensOf(container);
     scene.tweens.add({ targets: container, scale, duration, ease: 'Quad.out' });
   };
+  let activePointerId: number | null = null;
 
   hitZone.on('pointerover', () => {
     drawBg('hover');
@@ -111,16 +112,31 @@ export function createButton(
     drawBg('normal');
     animateScale(1, 120);
   });
-  hitZone.on('pointerdown', () => {
+  hitZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+    if (activePointerId !== null) {
+      return;
+    }
+    activePointerId = pointer.id;
     drawBg('pressed');
     animateScale(0.975, 55);
   });
-  hitZone.on('pointerup', () => {
+  hitZone.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+    if (activePointerId !== pointer.id) {
+      return;
+    }
+    activePointerId = null;
     drawBg('hover');
     animateScale(1.025, 80);
     audioManager.unlock();
     audioManager.play('click');
     onClick();
+  });
+  hitZone.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+    if (activePointerId === pointer.id) {
+      activePointerId = null;
+      drawBg('normal');
+      animateScale(1, 80);
+    }
   });
 
   scene.tweens.add({

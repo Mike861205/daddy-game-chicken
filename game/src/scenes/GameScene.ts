@@ -25,8 +25,15 @@ import { Enemy } from '../objects/Enemy.js';
 import { FallingItem } from '../objects/FallingItem.js';
 import { Player } from '../objects/Player.js';
 import { audioManager } from '../services/audio.js';
+import { DEFAULT_CONFIG } from '../services/api.js';
+import { removeRegistrationOverlays } from '../services/registrationForm.js';
 import { generateUuid } from '../utils/uuid.js';
 import type { GameResult, PublicConfig } from '../types.js';
+
+interface TouchControl {
+  visual: Phaser.GameObjects.Container;
+  hitZone: Phaser.GameObjects.Zone;
+}
 
 export class GameScene extends Phaser.Scene {
   private player!: Player;
@@ -95,9 +102,6 @@ export class GameScene extends Phaser.Scene {
 
   // Timers.
   private spawnTimer?: Phaser.Time.TimerEvent;
-  private countdownTimer?: Phaser.Time.TimerEvent;
-  private weaponTimer?: Phaser.Time.TimerEvent;
-  private firstWeaponTimer?: Phaser.Time.TimerEvent;
   private enemyTimer?: Phaser.Time.TimerEvent;
   private firstEnemyTimer?: Phaser.Time.TimerEvent;
 
@@ -127,8 +131,17 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    removeRegistrationOverlays();
+    this.input.enabled = true;
+    if (this.input.keyboard) {
+      this.input.keyboard.enabled = true;
+    }
+    this.cameras.main.resetFX();
+    this.physics.resume();
+    this.scale.refresh();
     this.resetState();
-    this.config = this.registry.get(REGISTRY.publicConfig) as PublicConfig;
+    this.config =
+      (this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined) ?? DEFAULT_CONFIG;
     this.applyDifficultySettings(this.config.difficultyLevel);
     this.refreshWorldPace();
     this.timeLeft = this.getBossArrivalSeconds();
@@ -573,12 +586,15 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.cursors = this.input.keyboard.createCursorKeys();
-    this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
-    this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
-    this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F);
-    this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S);
-    this.keyShift = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    // Do not globally preventDefault these keys. Keyboard captures survive at
+    // the game-manager level and can otherwise block letters such as "a" in
+    // the HTML registration fields after leaving a match.
+    this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A, false);
+    this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D, false);
+    this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
+    this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F, false);
+    this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S, false);
+    this.keyShift = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false);
     this.input.keyboard.on('keydown-P', () => this.togglePause());
   }
 
@@ -592,7 +608,7 @@ export class GameScene extends Phaser.Scene {
 
     this.bindHoldControl(leftBtn, this.leftTouchPointers);
     this.bindHoldControl(rightBtn, this.rightTouchPointers);
-    this.bindHoldControl(fireBtn, this.fireTouchPointers, () => this.tryFireWeapon());
+    this.bindHoldControl(fireBtn, this.fireTouchPointers, () => this.tryFireWeapon(true));
     this.bindHoldControl(coverBtn, this.coverTouchPointers);
 
     // Tap or drag anywhere in the play area to move the player. Tracking one
@@ -621,23 +637,30 @@ export class GameScene extends Phaser.Scene {
   }
 
   private bindHoldControl(
-    button: Phaser.GameObjects.Container,
+    control: TouchControl,
     pointers: Set<number>,
     onPress?: () => void,
   ): void {
-    button.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+    const release = (pointer: Phaser.Input.Pointer): void => {
+      pointers.delete(pointer.id);
+      if (pointers.size === 0) control.visual.setScale(1);
+    };
+
+    control.hitZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      // Ignore a duplicate browser/Phaser down event for the same physical
+      // contact. Every new pointerdown still counts as one deliberate tap.
+      if (pointers.has(pointer.id)) {
+        return;
+      }
       pointers.add(pointer.id);
-      button.setScale(0.92);
+      control.visual.setScale(0.92);
       onPress?.();
       this.triggerControlHaptic();
     });
-    button.on('pointerup', (pointer: Phaser.Input.Pointer) => {
-      pointers.delete(pointer.id);
-      if (pointers.size === 0) button.setScale(1);
-    });
-    button.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
-      pointers.delete(pointer.id);
-      if (pointers.size === 0) button.setScale(1);
+    control.hitZone.on('pointerup', release);
+    control.hitZone.on('pointerupoutside', release);
+    control.hitZone.on('pointerout', (pointer: Phaser.Input.Pointer) => {
+      if (pointer.isDown) release(pointer);
     });
   }
 
@@ -662,7 +685,7 @@ export class GameScene extends Phaser.Scene {
     this.player?.clearTarget();
   }
 
-  private makeControlButton(x: number, y: number, symbol: string): Phaser.GameObjects.Container {
+  private makeControlButton(x: number, y: number, symbol: string): TouchControl {
     const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const g = this.add.graphics();
     g.fillStyle(COLORS.yellow, 0.85);
@@ -674,14 +697,13 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     container.add([g, text]);
     container.setSize(156, 156);
-    container.setInteractive(
-      new Phaser.Geom.Circle(0, 0, 78),
-      Phaser.Geom.Circle.Contains,
-    );
-    return container;
+    return {
+      visual: container,
+      hitZone: this.createTouchHitZone(x, y, 156),
+    };
   }
 
-  private makeFireButton(x: number, y: number): Phaser.GameObjects.Container {
+  private makeFireButton(x: number, y: number): TouchControl {
     const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const glow = this.add.circle(0, 0, 68, COLORS.red, 0.2);
     const button = this.add
@@ -707,7 +729,6 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     container.add([glow, button, icon, label]);
     container.setSize(156, 156);
-    container.setInteractive(new Phaser.Geom.Circle(0, 0, 78), Phaser.Geom.Circle.Contains);
 
     this.tweens.add({
       targets: glow,
@@ -717,13 +738,13 @@ export class GameScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
-    container.on('pointerdown', () => container.setScale(0.94));
-    container.on('pointerup', () => container.setScale(1));
-    container.on('pointerout', () => container.setScale(1));
-    return container;
+    return {
+      visual: container,
+      hitZone: this.createTouchHitZone(x, y, 156),
+    };
   }
 
-  private makeCoverButton(x: number, y: number): Phaser.GameObjects.Container {
+  private makeCoverButton(x: number, y: number): TouchControl {
     const container = this.add.container(x, y).setDepth(30).setScrollFactor(0);
     const glow = this.add.circle(0, 0, 61, 0x43d9ff, 0.2);
     const button = this.add
@@ -749,10 +770,6 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5);
     container.add([glow, button, icon, label]);
     container.setSize(152, 152);
-    container.setInteractive(new Phaser.Geom.Circle(0, 0, 76), Phaser.Geom.Circle.Contains);
-    container.on('pointerdown', () => container.setScale(0.94));
-    container.on('pointerup', () => container.setScale(1));
-    container.on('pointerout', () => container.setScale(1));
     this.tweens.add({
       targets: glow,
       alpha: { from: 0.12, to: 0.34 },
@@ -761,7 +778,21 @@ export class GameScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
-    return container;
+    return {
+      visual: container,
+      hitZone: this.createTouchHitZone(x, y, 152),
+    };
+  }
+
+  private createTouchHitZone(x: number, y: number, size: number): Phaser.GameObjects.Zone {
+    // A Zone keeps its hit rectangle stable when Phaser scales and centres the
+    // canvas. Container hit areas can become offset on some mobile browsers.
+    return this.add
+      .zone(x, y, size, size)
+      .setOrigin(0.5)
+      .setDepth(31)
+      .setScrollFactor(0)
+      .setInteractive({ useHandCursor: true });
   }
 
   private createPauseButton(): void {
@@ -789,7 +820,7 @@ export class GameScene extends Phaser.Scene {
   private startTimers(): void {
     this.startWorldTimers();
 
-    this.countdownTimer = this.time.addEvent({
+    this.time.addEvent({
       delay: 1000,
       loop: true,
       callback: () => this.onTick(),
@@ -797,8 +828,8 @@ export class GameScene extends Phaser.Scene {
 
     // Arsenal drops continue during boss battles so the player can always
     // finish the fight even after exhausting the starting blaster.
-    this.firstWeaponTimer = this.time.delayedCall(3200, () => this.spawnWeaponPickup());
-    this.weaponTimer = this.time.addEvent({
+    this.time.delayedCall(3200, () => this.spawnWeaponPickup());
+    this.time.addEvent({
       delay: 12000,
       loop: true,
       callback: () => this.spawnWeaponPickup(),
@@ -1497,10 +1528,8 @@ export class GameScene extends Phaser.Scene {
     // the historic cannon instead of a duplicate pickup.
     this.nextWeaponIndex = 1;
     this.equippedWeaponSprite?.destroy();
-    this.equippedWeaponSprite = this.add
-      .image(this.player.x + 42, this.player.y - 70, definition.textureKey)
-      .setDisplaySize(74, 74)
-      .setDepth(9);
+    this.equippedWeaponSprite = undefined;
+    this.player.setIntegratedBlaster(true);
     this.updateHud();
 
     const hint = this.add
@@ -1530,10 +1559,16 @@ export class GameScene extends Phaser.Scene {
     this.weaponAmmo = definition.ammo;
     this.nextShotAt = this.time.now + 180;
     this.equippedWeaponSprite?.destroy();
-    this.equippedWeaponSprite = this.add
-      .image(this.player.x + 42, this.player.y - 70, definition.textureKey)
-      .setDisplaySize(weapon === 'poseidon' ? 82 : 74, weapon === 'poseidon' ? 82 : 74)
-      .setDepth(9);
+    this.equippedWeaponSprite = undefined;
+    this.player.setIntegratedBlaster(weapon === 'modern');
+    if (!this.player.hasIntegratedBlaster()) {
+      const displaySize = weapon === 'poseidon' ? 72 : 62;
+      this.equippedWeaponSprite = this.add
+        .image(this.player.x + 36, this.player.y - 78, definition.textureKey)
+        .setDisplaySize(displaySize, displaySize)
+        .setOrigin(0.28, 0.72)
+        .setDepth(9);
+    }
 
     audioManager.play('power');
     this.emitSparkle(x, y, definition.color);
@@ -1774,7 +1809,7 @@ export class GameScene extends Phaser.Scene {
     projectile.setData('bossProjectile', false).setData('curve', 0);
   }
 
-  private tryFireWeapon(): void {
+  private tryFireWeapon(fromFreshPress = false): void {
     if (this.paused || this.gameOver) {
       return;
     }
@@ -1787,14 +1822,18 @@ export class GameScene extends Phaser.Scene {
     }
 
     const weapon = WEAPONS[this.activeWeapon];
-    if (this.time.now < this.nextShotAt) {
+    // Holding FIRE still respects each weapon's automatic cadence. A fresh
+    // click/tap is never thrown away merely because it landed a few
+    // milliseconds before the cooldown ended.
+    if (!fromFreshPress && this.time.now < this.nextShotAt) {
       return;
     }
     this.nextShotAt = this.time.now + weapon.cooldownMs;
 
     const facing = this.player.getFacingDirection();
-    const muzzleX = this.player.x + 34 * facing;
-    const muzzleY = this.player.y - 112;
+    const integratedBlaster = this.player.hasIntegratedBlaster();
+    const muzzleX = this.player.x + (integratedBlaster ? 58 : 76) * facing;
+    const muzzleY = this.player.y - (integratedBlaster ? 94 : 99);
     if (this.activeWeapon === 'poseidon') {
       this.spawnProjectile(muzzleX - 22, muzzleY + 4, this.activeWeapon, -105);
       this.spawnProjectile(muzzleX, muzzleY - 8, this.activeWeapon, 0);
@@ -1962,6 +2001,7 @@ export class GameScene extends Phaser.Scene {
     this.activeWeapon = null;
     this.equippedWeaponSprite?.destroy();
     this.equippedWeaponSprite = undefined;
+    this.player.setIntegratedBlaster(false);
     this.updateHud();
   }
 
@@ -1969,12 +2009,13 @@ export class GameScene extends Phaser.Scene {
     if (!this.equippedWeaponSprite || !this.activeWeapon) {
       return;
     }
-    const bob = Math.sin(this.time.now * 0.009) * 2.5;
+    const gait = Math.sin(this.time.now * 0.026);
+    const bob = Math.max(0, gait) * -4 + Math.sin(this.time.now * 0.009) * 1.2;
     const facing = this.player.getFacingDirection();
     this.equippedWeaponSprite
-      .setPosition(this.player.x + 43 * facing, this.player.y - 73 + bob)
+      .setPosition(this.player.x + 34 * facing, this.player.y - 79 + bob)
       .setFlipX(facing < 0)
-      .setAngle((this.activeWeapon === 'poseidon' ? -8 : -3) * facing);
+      .setAngle((this.activeWeapon === 'poseidon' ? -10 : -5) * facing);
   }
 
   // ---------------------------------------------------------------------------
@@ -2146,16 +2187,6 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.gameOver = true;
-    this.stopWorldTimers();
-    this.countdownTimer?.remove();
-    this.weaponTimer?.remove();
-    this.firstWeaponTimer?.remove();
-    this.bossProjectiles?.children.each((child) => {
-      const projectile = child as Phaser.Physics.Arcade.Image;
-      if (projectile.active) this.recycleEnemyProjectile(projectile);
-      return true;
-    });
-    this.physics.pause();
     audioManager.play('win');
 
     const result: GameResult = {
@@ -2169,10 +2200,9 @@ export class GameScene extends Phaser.Scene {
     };
     this.registry.set(REGISTRY.lastResult, result);
 
-    this.cameras.main.fade(600, 10, 42, 108);
-    this.time.delayedCall(650, () => {
-      this.scene.start(SCENES.Result);
-    });
+    // Queue only the scene change from inside the collision callback. Phaser
+    // will stop timers, input and physics in its own safe shutdown order.
+    this.scene.start(SCENES.Result);
   }
 
   private cleanup(): void {
@@ -2180,15 +2210,19 @@ export class GameScene extends Phaser.Scene {
       document.removeEventListener('visibilitychange', this.visibilityHandler);
       this.visibilityHandler = undefined;
     }
-    this.stopWorldTimers();
-    this.countdownTimer?.remove();
-    this.weaponTimer?.remove();
-    this.firstWeaponTimer?.remove();
-    this.boss?.recycle();
-    this.clearTouchControls();
-    this.player.setCovering(false);
-    this.equippedWeaponSprite?.destroy();
+
+    // SHUTDOWN listeners from Arcade Physics and the Scene Clock run before
+    // this callback. Do not call methods on bodies, timers or display objects
+    // here: they may already be destroyed. Phaser owns their disposal.
+    this.spawnTimer = undefined;
+    this.firstEnemyTimer = undefined;
+    this.enemyTimer = undefined;
+    this.leftTouchPointers.clear();
+    this.rightTouchPointers.clear();
+    this.fireTouchPointers.clear();
+    this.coverTouchPointers.clear();
+    this.dragPointerId = null;
+    this.pauseOverlay = undefined;
     this.equippedWeaponSprite = undefined;
-    this.input.removeAllListeners();
   }
 }

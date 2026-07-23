@@ -14,6 +14,21 @@ export interface RegistrationDefaults {
   branch?: string;
 }
 
+/** Remove any stale registration layer left behind by a reload or scene change. */
+export function removeRegistrationOverlays(): void {
+  document.querySelectorAll<HTMLElement>('.dgc-overlay').forEach((overlay) => overlay.remove());
+  const activeElement = document.activeElement;
+  if (activeElement instanceof HTMLElement) {
+    activeElement.blur();
+  }
+}
+
+function resolveInitialBranch(branches: Branch[], requested?: string): string {
+  return branches.some((branch) => branch.id === requested)
+    ? requested ?? ''
+    : branches[0]?.id ?? '';
+}
+
 /**
  * Show a modern HTML registration form as an overlay above the game canvas.
  * Resolves with the collected data, or null if the user cancels.
@@ -26,6 +41,7 @@ export function showRegistrationForm(
   defaults: RegistrationDefaults = {},
 ): Promise<RegistrationData | null> {
   return new Promise((resolve) => {
+    removeRegistrationOverlays();
     const overlay = document.createElement('div');
     overlay.className = 'dgc-overlay';
 
@@ -44,23 +60,23 @@ export function showRegistrationForm(
           <div class="dgc-card__title">¡ANTES DE JUGAR!</div>
           <div class="dgc-card__subtitle">Regístrate para competir</div>
         </div>
-        <form class="dgc-card__body" novalidate>
+        <form class="dgc-card__body" novalidate autocomplete="off">
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-name">Nombre</label>
             <input class="dgc-input" id="dgc-name" name="name" type="text" maxlength="40"
-              autocomplete="name" placeholder="Tu nombre" value="${escapeAttr(defaults.name ?? '')}" />
+              autocomplete="off" placeholder="Tu nombre" value="${escapeAttr(defaults.name ?? '')}" />
           </div>
 
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-avatar">Nombre de avatar</label>
             <input class="dgc-input" id="dgc-avatar" name="avatar" type="text" maxlength="20"
-              placeholder="Ej. DaddyMaster" value="${escapeAttr(defaults.avatar ?? '')}" />
+              autocomplete="off" placeholder="Ej. DaddyMaster" value="${escapeAttr(defaults.avatar ?? '')}" />
           </div>
 
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-phone">Teléfono</label>
             <input class="dgc-input" id="dgc-phone" name="phone" type="tel" maxlength="20"
-              inputmode="tel" autocomplete="tel" placeholder="Ej. 6241548148" value="${escapeAttr(
+              inputmode="tel" autocomplete="off" placeholder="Ej. 6241548148" value="${escapeAttr(
                 defaults.phone ?? '',
               )}" />
           </div>
@@ -93,7 +109,7 @@ export function showRegistrationForm(
       overlay.querySelectorAll<HTMLButtonElement>('.dgc-branch'),
     );
 
-    let selectedBranch = defaults.branch ?? '';
+    let selectedBranch = resolveInitialBranch(branches, defaults.branch);
     const applyBranchSelection = () => {
       for (const el of branchEls) {
         el.classList.toggle('is-active', el.dataset.branch === selectedBranch);
@@ -199,6 +215,7 @@ export function showReturningPlayerForm(
   defaults: RegistrationDefaults = {},
 ): Promise<ReturningPlayerResult> {
   return new Promise((resolve) => {
+    removeRegistrationOverlays();
     const overlay = document.createElement('div');
     overlay.className = 'dgc-overlay';
 
@@ -217,11 +234,11 @@ export function showReturningPlayerForm(
           <div class="dgc-card__title">¡QUÉ BUENO VERTE!</div>
           <div class="dgc-card__subtitle">Ingresa tu teléfono para volver a jugar</div>
         </div>
-        <form class="dgc-card__body" novalidate>
+        <form class="dgc-card__body" novalidate autocomplete="off">
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-r-phone">Teléfono registrado</label>
             <input class="dgc-input" id="dgc-r-phone" name="phone" type="tel" maxlength="20"
-              inputmode="tel" autocomplete="tel" placeholder="Ej. 6241548148" value="${escapeAttr(
+              inputmode="tel" autocomplete="off" placeholder="Ej. 6241548148" value="${escapeAttr(
                 defaults.phone ?? '',
               )}" />
           </div>
@@ -255,7 +272,7 @@ export function showReturningPlayerForm(
     const registerBtn = overlay.querySelector('#dgc-register') as HTMLButtonElement;
     const branchEls = Array.from(overlay.querySelectorAll<HTMLButtonElement>('.dgc-branch'));
 
-    let selectedBranch = defaults.branch ?? '';
+    let selectedBranch = resolveInitialBranch(branches, defaults.branch);
     const applyBranchSelection = () => {
       for (const el of branchEls) {
         el.classList.toggle('is-active', el.dataset.branch === selectedBranch);
@@ -270,6 +287,7 @@ export function showReturningPlayerForm(
     applyBranchSelection();
 
     let found: ReturningLookupResult | null = null;
+    let lookedUpPhone = '';
 
     const cleanup = () => overlay.remove();
     const showError = (message: string) => {
@@ -284,6 +302,16 @@ export function showReturningPlayerForm(
     registerBtn.addEventListener('click', () => {
       cleanup();
       resolve('register');
+    });
+
+    phoneInput.addEventListener('input', () => {
+      if (phoneInput.value.trim() !== lookedUpPhone) {
+        found = null;
+        lookedUpPhone = '';
+        foundEl.hidden = true;
+        foundEl.textContent = '';
+        showError('');
+      }
     });
 
     form.addEventListener('submit', async (event) => {
@@ -301,12 +329,21 @@ export function showReturningPlayerForm(
         showError('');
         submitBtn.disabled = true;
         submitBtn.textContent = 'Buscando…';
-        found = await lookup(phone);
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'JUGAR';
+        try {
+          found = await lookup(phone);
+          lookedUpPhone = phone;
+        } catch {
+          found = null;
+          showError('No se pudo consultar ahora. Intenta de nuevo.');
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'JUGAR';
+        }
 
         if (!found) {
-          showError('No encontramos ese número. Regístrate para jugar.');
+          if (!errorEl.textContent) {
+            showError('No encontramos ese número. Regístrate para jugar.');
+          }
           return;
         }
 

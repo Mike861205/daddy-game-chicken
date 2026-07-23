@@ -3,7 +3,11 @@ import { COLORS, GAME_HEIGHT, GAME_WIDTH, REGISTRY, SCENES } from '../config/con
 import { createButton, createTitle } from '../utils/ui.js';
 import { audioManager } from '../services/audio.js';
 import { storage } from '../services/storage.js';
-import { showRegistrationForm, showReturningPlayerForm } from '../services/registrationForm.js';
+import {
+  removeRegistrationOverlays,
+  showRegistrationForm,
+  showReturningPlayerForm,
+} from '../services/registrationForm.js';
 import type { RegistrationData } from '../services/registrationForm.js';
 import { api } from '../services/api.js';
 import type { PublicConfig } from '../types.js';
@@ -13,12 +17,24 @@ import type { PublicConfig } from '../types.js';
  */
 export class MenuScene extends Phaser.Scene {
   private soundButton?: Phaser.GameObjects.Text;
+  private formOpen = false;
+  private transitioning = false;
 
   constructor() {
     super(SCENES.Menu);
   }
 
   create(): void {
+    this.formOpen = false;
+    this.transitioning = false;
+    this.input.enabled = true;
+    if (this.input.keyboard) {
+      this.input.keyboard.enabled = true;
+      this.input.keyboard.disableGlobalCapture();
+    }
+    this.cameras.main.resetFX();
+    removeRegistrationOverlays();
+    this.scale.refresh();
     this.drawBackground();
 
     // Unlock audio on the first interaction with the menu.
@@ -169,51 +185,80 @@ export class MenuScene extends Phaser.Scene {
   }
 
   private async openRegistration(): Promise<void> {
+    if (this.formOpen || this.transitioning) {
+      return;
+    }
+    this.formOpen = true;
+    this.input.enabled = false;
     audioManager.unlock();
     const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
     const branches = config?.branches ?? [];
 
-    const data = await showRegistrationForm(branches, {
-      name: (this.registry.get(REGISTRY.playerName) as string) ?? '',
-      avatar: storage.getNickname(),
-      phone: (this.registry.get(REGISTRY.playerPhone) as string) ?? '',
-      branch: storage.getBranch() ?? branches[0]?.id ?? '',
-    });
+    try {
+      const data = await showRegistrationForm(branches, {
+        name: '',
+        avatar: '',
+        phone: '',
+        branch: branches[0]?.id ?? '',
+      });
 
-    if (!data) {
-      return;
+      if (data && this.scene.isActive()) {
+        this.startWithPlayer(data);
+      }
+    } finally {
+      this.formOpen = false;
+      if (this.scene.isActive() && !this.transitioning) {
+        this.input.enabled = true;
+        this.scale.refresh();
+      }
     }
-
-    this.startWithPlayer(data);
   }
 
   private async openReturning(): Promise<void> {
+    if (this.formOpen || this.transitioning) {
+      return;
+    }
+    this.formOpen = true;
+    this.input.enabled = false;
     audioManager.unlock();
     const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
     const branches = config?.branches ?? [];
 
-    const result = await showReturningPlayerForm(
-      branches,
-      (phone) => api.lookupPlayer(phone),
-      {
-        phone: (this.registry.get(REGISTRY.playerPhone) as string) ?? '',
-        branch: storage.getBranch() ?? branches[0]?.id ?? '',
-      },
-    );
+    let openRegistrationNext = false;
+    try {
+      const result = await showReturningPlayerForm(
+        branches,
+        (phone) => api.lookupPlayer(phone),
+        {
+          phone: '',
+          branch: storage.getBranch() ?? branches[0]?.id ?? '',
+        },
+      );
 
-    if (result === null) {
-      return;
+      if (result === 'register') {
+        openRegistrationNext = true;
+      } else if (result && this.scene.isActive()) {
+        this.startWithPlayer(result);
+      }
+    } finally {
+      this.formOpen = false;
+      if (this.scene.isActive() && !this.transitioning) {
+        this.input.enabled = true;
+        this.scale.refresh();
+      }
     }
-    if (result === 'register') {
+
+    if (openRegistrationNext && this.scene.isActive()) {
       void this.openRegistration();
-      return;
     }
-
-    this.startWithPlayer(result);
   }
 
   /** Persist the player info and start the game. */
   private startWithPlayer(data: RegistrationData): void {
+    if (this.transitioning) {
+      return;
+    }
+    this.transitioning = true;
     this.registry.set(REGISTRY.playerName, data.name);
     this.registry.set(REGISTRY.playerPhone, data.phone);
     this.registry.set(REGISTRY.nickname, data.avatar);
@@ -222,6 +267,9 @@ export class MenuScene extends Phaser.Scene {
     storage.setBranch(data.branch);
 
     audioManager.play('click');
+    removeRegistrationOverlays();
+    this.input.enabled = false;
+    this.scale.refresh();
     this.scene.start(SCENES.Game);
   }
 

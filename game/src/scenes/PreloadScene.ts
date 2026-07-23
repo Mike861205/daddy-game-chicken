@@ -33,6 +33,11 @@ export class PreloadScene extends Phaser.Scene {
       { frameWidth: 512, frameHeight: 512 },
     );
     this.load.spritesheet(
+      'daddy-pollo-armed-anim',
+      `${imageBase}/daddy-pollo-armed-anim.png?v=${assetVersion}`,
+      { frameWidth: 512, frameHeight: 512 },
+    );
+    this.load.spritesheet(
       'enemigos-anim',
       `${imageBase}/enemigos-anim.png?v=${assetVersion}`,
       { frameWidth: 512, frameHeight: 512 },

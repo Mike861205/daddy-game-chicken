@@ -9,8 +9,9 @@ import {
 } from '../config/constants.js';
 import { createButton, createTitle } from '../utils/ui.js';
 import { resolvePromotion } from '../utils/promotion.js';
-import { api } from '../services/api.js';
+import { api, DEFAULT_CONFIG } from '../services/api.js';
 import { storage } from '../services/storage.js';
+import { removeRegistrationOverlays } from '../services/registrationForm.js';
 import type { GameResult, PublicConfig, RewardResponse } from '../types.js';
 
 /**
@@ -21,6 +22,7 @@ export class ResultScene extends Phaser.Scene {
   private config!: PublicConfig;
   private nicknameInput?: Phaser.GameObjects.DOMElement;
   private saved = false;
+  private saving = false;
   private statusText!: Phaser.GameObjects.Text;
   private reward: RewardResponse | null = null;
 
@@ -29,8 +31,17 @@ export class ResultScene extends Phaser.Scene {
   }
 
   create(): void {
+    removeRegistrationOverlays();
     this.result = this.registry.get(REGISTRY.lastResult) as GameResult;
-    this.config = this.registry.get(REGISTRY.publicConfig) as PublicConfig;
+    this.config =
+      (this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined) ?? DEFAULT_CONFIG;
+    this.saved = false;
+    this.saving = false;
+    this.reward = null;
+    this.nicknameInput = undefined;
+    this.input.enabled = true;
+    this.cameras.main.resetFX();
+    this.scale.refresh();
 
     if (!this.result) {
       this.scene.start(SCENES.Menu);
@@ -186,6 +197,10 @@ export class ResultScene extends Phaser.Scene {
       this.statusText.setText('Ya guardaste esta partida.');
       return;
     }
+    if (this.saving) {
+      return;
+    }
+    this.saving = true;
     const nickname = this.getNickname();
     storage.setNickname(nickname);
     this.registry.set(REGISTRY.nickname, nickname);
@@ -196,22 +211,33 @@ export class ResultScene extends Phaser.Scene {
 
     try {
       const response = await api.submitGameSession(this.result, nickname, phone, name);
+      if (!this.scene.isActive()) {
+        return;
+      }
       this.saved = true;
       this.statusText.setColor(COLORS_HEX.neon);
       this.statusText.setText(`¡Guardado! Posición aprox: #${response.approximatePosition}`);
 
       // Request a reward if the score qualifies.
       this.reward = await api.requestReward(this.result.clientSessionId);
+      if (!this.scene.isActive()) {
+        return;
+      }
       if (this.reward?.granted && this.reward.code) {
         this.time.delayedCall(400, () =>
           this.showPromotion(this.reward?.label ?? '', this.reward?.code),
         );
       }
     } catch (error) {
+      if (!this.scene.isActive()) {
+        return;
+      }
       this.statusText.setColor(COLORS_HEX.red);
       this.statusText.setText(
         error instanceof Error ? error.message : 'No se pudo guardar. Intenta de nuevo.',
       );
+    } finally {
+      this.saving = false;
     }
   }
 

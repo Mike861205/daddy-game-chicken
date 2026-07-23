@@ -12,27 +12,39 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private shadow: Phaser.GameObjects.Ellipse;
   private baseScaleX: number;
   private baseScaleY: number;
+  private readonly groundY: number;
   private celebrateUntil = 0;
   private recoilUntil = 0;
   private hitUntil = 0;
   private covering = false;
   private facingDirection: -1 | 1 = 1;
   private visualState = '';
-  private readonly hasAnimationSheet: boolean;
+  private hasAnimationSheet: boolean;
+  private animationPrefix = 'daddy';
+  private usingIntegratedBlaster = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
+    const armedTexture = scene.textures.exists('daddy-pollo-armed-anim');
     const animatedTexture = scene.textures.exists('daddy-pollo-anim');
-    super(scene, x, y, animatedTexture ? 'daddy-pollo-anim' : 'daddy-pollo', animatedTexture ? 0 : undefined);
-    this.hasAnimationSheet = animatedTexture;
+    const textureKey = armedTexture
+      ? 'daddy-pollo-armed-anim'
+      : animatedTexture
+        ? 'daddy-pollo-anim'
+        : 'daddy-pollo';
+    super(scene, x, y, textureKey, armedTexture || animatedTexture ? 0 : undefined);
+    this.hasAnimationSheet = armedTexture || animatedTexture;
+    this.usingIntegratedBlaster = armedTexture;
+    this.animationPrefix = armedTexture ? 'daddy-armed' : 'daddy';
+    this.groundY = y;
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    if (animatedTexture) {
-      this.createAnimations(scene);
+    if (this.hasAnimationSheet) {
+      this.createAnimations(scene, textureKey, this.animationPrefix);
     }
 
     this.setOrigin(0.5, 0.9);
-    const displaySize = animatedTexture ? 158 : 120;
+    const displaySize = this.hasAnimationSheet ? 172 : 120;
     this.setDisplaySize(displaySize, displaySize);
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
@@ -103,6 +115,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setFlipX(this.facingDirection < 0);
     this.updateCharacterAnimation(speedRatio, now);
 
+    // A short vertical stride makes the two running poses read as a real gait
+    // instead of a sticker sliding horizontally. The physics body follows the
+    // small hop, while the shadow stays planted on the ground.
+    const stride = Math.sin(now * 0.026);
+    const runningHop = speedRatio > 0.08 ? Math.max(0, stride) * 7 * speedRatio : 0;
+    const celebrateHop = celebrating ? Math.abs(Math.sin(now * 0.022)) * 9 : 0;
+    this.y = Phaser.Math.Linear(this.y, this.groundY - runningHop - celebrateHop, 0.42);
+
     const stretch = celebrating ? Math.abs(Math.sin(clock * 1.8)) * 0.14 : speedRatio * 0.045;
     const recoilSquash = recoil ? 0.1 : 0;
     this.setScale(
@@ -120,10 +140,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     );
 
     const shadowPulse = 1 - Math.abs(breathing) * 0.06;
+    const airborne = Phaser.Math.Clamp((this.groundY - this.y) / 12, 0, 1);
     this.shadow
-      .setPosition(this.x, this.y + 7)
-      .setScale(shadowPulse + speedRatio * 0.12, shadowPulse)
-      .setAlpha(0.34 + speedRatio * 0.13);
+      .setPosition(this.x, this.groundY + 7)
+      .setScale(
+        shadowPulse + speedRatio * 0.12 - airborne * 0.12,
+        shadowPulse - airborne * 0.1,
+      )
+      .setAlpha(0.34 + speedRatio * 0.13 - airborne * 0.12);
     this.updateShield();
   }
 
@@ -137,6 +161,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   getFacingDirection(): -1 | 1 {
     return this.facingDirection;
+  }
+
+  setIntegratedBlaster(active: boolean): void {
+    const armedAvailable = this.scene.textures.exists('daddy-pollo-armed-anim');
+    const nextIntegrated = active && armedAvailable;
+    const nextTexture = nextIntegrated ? 'daddy-pollo-armed-anim' : 'daddy-pollo-anim';
+    if (!this.scene.textures.exists(nextTexture)) {
+      return;
+    }
+    if (this.usingIntegratedBlaster === nextIntegrated && this.texture.key === nextTexture) {
+      return;
+    }
+
+    this.stop();
+    this.setTexture(nextTexture, 0);
+    this.usingIntegratedBlaster = nextIntegrated;
+    this.animationPrefix = nextIntegrated ? 'daddy-armed' : 'daddy';
+    this.hasAnimationSheet = true;
+    this.visualState = '';
+    this.createAnimations(this.scene, nextTexture, this.animationPrefix);
+  }
+
+  hasIntegratedBlaster(): boolean {
+    return this.usingIntegratedBlaster;
   }
 
   setCovering(active: boolean): void {
@@ -206,20 +254,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     super.destroy(fromScene);
   }
 
-  private createAnimations(scene: Phaser.Scene): void {
-    if (!scene.anims.exists('daddy-idle')) {
+  private createAnimations(scene: Phaser.Scene, textureKey: string, prefix: string): void {
+    if (!scene.anims.exists(`${prefix}-idle`)) {
       scene.anims.create({
-        key: 'daddy-idle',
-        frames: scene.anims.generateFrameNumbers('daddy-pollo-anim', { frames: [0, 1] }),
-        frameRate: 2.2,
+        key: `${prefix}-idle`,
+        frames: scene.anims.generateFrameNumbers(textureKey, { frames: [0, 1] }),
+        frameRate: prefix === 'daddy-armed' ? 3.2 : 2.2,
         repeat: -1,
       });
     }
-    if (!scene.anims.exists('daddy-run')) {
+    if (!scene.anims.exists(`${prefix}-run`)) {
       scene.anims.create({
-        key: 'daddy-run',
-        frames: scene.anims.generateFrameNumbers('daddy-pollo-anim', { frames: [2, 3] }),
-        frameRate: 9,
+        key: `${prefix}-run`,
+        frames: scene.anims.generateFrameNumbers(textureKey, { frames: [2, 3] }),
+        frameRate: 11,
         repeat: -1,
       });
     }
@@ -248,7 +296,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
     this.visualState = nextState;
     if (nextState === 'idle' || nextState === 'run') {
-      this.play(`daddy-${nextState}`, true);
+      this.play(`${this.animationPrefix}-${nextState}`, true);
     } else {
       this.stop();
       this.setFrame(nextState === 'fire' ? 4 : 5);
