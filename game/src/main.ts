@@ -40,6 +40,14 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
+  fps: {
+    target: 60,
+    // Phaser schedules the next setTimeout tick before running the current
+    // frame. Unlike its RAF path, an isolated callback error cannot cancel the
+    // complete game loop and leave a permanent frozen canvas.
+    forceSetTimeOut: true,
+    smoothStep: true,
+  },
   // Pause rendering/logic when the tab is hidden to save resources.
   autoFocus: true,
   render: {

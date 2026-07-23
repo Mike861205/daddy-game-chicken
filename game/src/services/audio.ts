@@ -134,7 +134,14 @@ class AudioManager {
       enemy: { freq: 260, type: 'triangle', duration: 0.16, sweep: 520 },
     };
     const preset = presets[name];
-    this.tone(preset.freq, preset.type, preset.duration, preset.sweep);
+    try {
+      this.tone(preset.freq, preset.type, preset.duration, preset.sweep);
+    } catch {
+      // Audio is optional. A suspended/closed mobile AudioContext must never
+      // interrupt gameplay or freeze a boss/scene transition.
+      this.context = null;
+      this.bindFirstGestureUnlock();
+    }
   }
 
   private tone(freq: number, type: OscillatorType, duration: number, sweepTo?: number): void {
@@ -168,7 +175,13 @@ class AudioManager {
     }
     this.playbackRequest += 1;
     const request = this.playbackRequest;
-    const playback = this.music.play();
+    let playback: Promise<void> | undefined;
+    try {
+      playback = this.music.play();
+    } catch {
+      this.bindFirstGestureUnlock();
+      return;
+    }
     if (playback) {
       void playback
         .then(() => {

@@ -83,6 +83,7 @@ export class GameScene extends Phaser.Scene {
   private nextEnemyDamageAt = 0;
   private nextEnemyIndex = 0;
   private enemySpawnId = 0;
+  private nextBossReinforcementAt = 0;
 
   // HUD.
   private scoreText!: Phaser.GameObjects.Text;
@@ -195,6 +196,7 @@ export class GameScene extends Phaser.Scene {
     this.nextEnemyDamageAt = 0;
     this.nextEnemyIndex = 0;
     this.enemySpawnId = 0;
+    this.nextBossReinforcementAt = 0;
     this.leftPressed = false;
     this.rightPressed = false;
     this.dragging = false;
@@ -483,26 +485,19 @@ export class GameScene extends Phaser.Scene {
     });
 
     this.physics.add.overlap(
-      this.projectiles,
-      this.boss,
-      (projectileObj, bossObj) => {
-        const projectile = projectileObj as Phaser.Physics.Arcade.Image;
-        const boss = bossObj as Boss;
-        if (projectile.active && boss.active && this.bossActive) {
-          this.onProjectileHitBoss(projectile, boss);
-        }
-      },
-      undefined,
-      this,
-    );
-
-    this.physics.add.overlap(
       this.player,
       this.bossProjectiles,
       (_playerObj, projectileObj) => {
         const projectile = projectileObj as Phaser.Physics.Arcade.Image;
-        if (projectile.active) {
-          this.onEnemyProjectileHit(projectile);
+        try {
+          if (projectile.active) {
+            this.onEnemyProjectileHit(projectile);
+          }
+        } catch (error) {
+          console.error('Se recuperó un impacto del gran jefe contra Daddy Pollo.', error);
+          if (projectile.active) {
+            this.recycleEnemyProjectile(projectile);
+          }
         }
       },
       undefined,
@@ -895,11 +890,18 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Keyboard / touch movement.
-    const left = this.leftPressed || this.leftTouchPointers.size > 0 || this.cursors?.left.isDown || this.keyA?.isDown;
-    const right = this.rightPressed || this.rightTouchPointers.size > 0 || this.cursors?.right.isDown || this.keyD?.isDown;
-    const wantsCover = Boolean(this.coverPressed || this.coverTouchPointers.size > 0 || this.keyS?.isDown || this.keyShift?.isDown);
-    this.updateCover(wantsCover, delta);
+    try {
+      // A mobile browser can leave Arcade Physics paused after an interruption
+      // without showing our pause overlay. Keep an active encounter moving.
+      if (this.physics.world.isPaused) {
+        this.physics.resume();
+      }
+
+      // Keyboard / touch movement.
+      const left = this.leftPressed || this.leftTouchPointers.size > 0 || this.cursors?.left.isDown || this.keyA?.isDown;
+      const right = this.rightPressed || this.rightTouchPointers.size > 0 || this.cursors?.right.isDown || this.keyD?.isDown;
+      const wantsCover = Boolean(this.coverPressed || this.coverTouchPointers.size > 0 || this.keyS?.isDown || this.keyShift?.isDown);
+      this.updateCover(wantsCover, delta);
 
     if (this.player.isCovering()) {
       this.player.stopMoving();
@@ -956,16 +958,47 @@ export class GameScene extends Phaser.Scene {
     });
 
     if (this.bossActive && this.boss.active) {
-      const bossUpdate = this.boss.updateBoss(this.time.now, this.difficultySpeedMultiplier);
-      if (bossUpdate.shouldAttack) {
-        this.spawnBossAttack(bossUpdate.phase);
+      try {
+        const bossUpdate = this.boss.updateBoss(
+          this.time.now,
+          this.difficultySpeedMultiplier,
+          delta,
+        );
+        if (bossUpdate.shouldAttack) {
+          this.spawnBossAttack(bossUpdate.phase);
+        }
+        if (this.time.now >= this.nextBossReinforcementAt) {
+          this.spawnEnemy(true);
+          this.nextBossReinforcementAt =
+            this.time.now + this.getBossReinforcementDelay();
+        }
+      } catch (error) {
+        // One malformed pooled projectile must not abort Phaser's update loop.
+        console.error('Se recuperó el ciclo de batalla del gran jefe.', error);
+        this.cameras.main.resetFX();
+        if (this.physics.world.isPaused) {
+          this.physics.resume();
+        }
       }
     }
 
     this.projectiles.children.each((child) => {
       const projectile = child as Phaser.Physics.Arcade.Image;
+      if (!projectile.active) {
+        return true;
+      }
+      // Boss hits are resolved manually instead of from an Arcade overlap
+      // callback. This keeps damage deterministic and prevents a callback
+      // exception from aborting Phaser's physics step on mobile browsers.
       if (
-        projectile.active &&
+        this.bossActive &&
+        this.boss.active &&
+        this.projectileTouchesBoss(projectile)
+      ) {
+        this.onProjectileHitBoss(projectile, this.boss);
+        return true;
+      }
+      if (
         (projectile.y < -90 || projectile.x < -60 || projectile.x > GAME_WIDTH + 60)
       ) {
         this.recycleProjectile(projectile);
@@ -989,22 +1022,40 @@ export class GameScene extends Phaser.Scene {
       if (!projectile.active) {
         return true;
       }
-      const curve = Number(projectile.getData('curve') ?? 0);
-      const body = projectile.body as Phaser.Physics.Arcade.Body;
-      if (curve !== 0) {
-        body.velocity.x += curve * (delta / 1000);
-      }
-      if (
-        projectile.y > GAME_HEIGHT - 104 ||
-        projectile.x < -90 ||
-        projectile.x > GAME_WIDTH + 90
-      ) {
-        this.recycleEnemyProjectile(projectile);
+      try {
+        const body = projectile.body as Phaser.Physics.Arcade.Body | null;
+        if (!body || !body.enable) {
+          projectile.setActive(false).setVisible(false);
+          return true;
+        }
+        const curve = Number(projectile.getData('curve') ?? 0);
+        if (curve !== 0) {
+          body.velocity.x += curve * (delta / 1000);
+        }
+        if (
+          projectile.y > GAME_HEIGHT - 104 ||
+          projectile.x < -90 ||
+          projectile.x > GAME_WIDTH + 90
+        ) {
+          this.recycleEnemyProjectile(projectile);
+        }
+      } catch (error) {
+        console.error('Se recicló un ataque inválido del gran jefe.', error);
+        projectile.setActive(false).setVisible(false);
       }
       return true;
     });
 
-    this.updatePowersExpiry();
+      this.updatePowersExpiry();
+    } catch (error) {
+      // Phaser's RAF scheduler stops requesting frames after an uncaught
+      // exception. Never let one optional object or effect freeze the canvas.
+      console.error('Se recuperó un cuadro del juego sin detener la partida.', error);
+      this.cameras.main.resetFX();
+      if (!this.paused && this.physics.world.isPaused) {
+        this.physics.resume();
+      }
+    }
   }
 
   private onTick(): void {
@@ -1049,14 +1100,25 @@ export class GameScene extends Phaser.Scene {
     if (this.bossActive || this.worldTransitioning || this.gameOver) {
       return;
     }
-    this.bossActive = true;
+    this.worldTransitioning = true;
     this.stopWorldTimers();
-    this.clearArenaForBoss();
+    if (this.physics.world.isPaused) {
+      this.physics.resume();
+    }
+
+    // Arena cleanup is cosmetic. A malformed pooled object must never prevent
+    // the configured boss encounter from starting.
+    try {
+      this.clearArenaForBoss();
+    } catch (error) {
+      console.error('No se pudo limpiar por completo la arena del jefe.', error);
+    }
+
     this.timeText.setText('JEFE').setColor(this.currentWorld.colorHex);
     this.comboText.setVisible(false);
     this.powerText.setVisible(false);
     this.bossNameText
-      .setText(`⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠`)
+      .setText(`⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠  •  VIDA 100%`)
       .setColor(this.currentWorld.colorHex)
       .setVisible(true);
     this.bossHealthBg.setVisible(true);
@@ -1065,9 +1127,41 @@ export class GameScene extends Phaser.Scene {
       .setScale(1, 1)
       .setVisible(true);
 
-    this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel);
-    this.cameras.main.flash(380, 255, 45, 55);
-    this.cameras.main.shake(520, 0.012);
+    // The player must never enter a boss fight unable to shoot. Preserve the
+    // weapon they earned and refill it; use the starter blaster as fallback.
+    if (this.activeWeapon) {
+      this.weaponAmmo = Math.max(this.weaponAmmo, WEAPONS[this.activeWeapon].ammo);
+    } else {
+      this.equipStartingWeapon();
+    }
+    this.updateHud();
+
+    try {
+      this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel);
+      const bossBody = this.boss.body as Phaser.Physics.Arcade.Body;
+      bossBody.reset(GAME_WIDTH / 2, 325);
+      bossBody.setVelocity(0, 0);
+    } catch (error) {
+      console.error('No se pudo iniciar el jefe; se reintentará.', error);
+      this.bossActive = false;
+      this.worldTransitioning = false;
+      this.timeLeft = 2;
+      this.timeText.setText('2').setColor(COLORS_HEX.yellow);
+      this.bossNameText.setVisible(false);
+      this.bossHealthBg.setVisible(false);
+      this.bossHealthFill.setVisible(false);
+      this.comboText.setVisible(true);
+      this.powerText.setVisible(true);
+      this.startWorldTimers();
+      return;
+    }
+
+    this.bossActive = true;
+    this.worldTransitioning = false;
+    this.nextBossReinforcementAt =
+      this.time.now + Math.max(2400, this.getBossReinforcementDelay() * 0.58);
+    this.cameras.main.resetFX();
+    this.cameras.main.shake(260, 0.008);
     audioManager.play('blast');
 
     const warning = this.add
@@ -1083,18 +1177,12 @@ export class GameScene extends Phaser.Scene {
       .setDepth(70);
     this.tweens.add({
       targets: warning,
-      scale: { from: 0.25, to: 1.08 },
+      scale: { from: 0.72, to: 1.06 },
       alpha: { from: 1, to: 0 },
-      duration: 1450,
-      hold: 400,
-      ease: 'Back.out',
+      duration: 900,
+      hold: 250,
+      ease: 'Cubic.out',
       onComplete: () => warning.destroy(),
-    });
-    this.tweens.add({
-      targets: this.boss,
-      y: 325,
-      duration: 1350,
-      ease: 'Back.out',
     });
   }
 
@@ -1118,7 +1206,12 @@ export class GameScene extends Phaser.Scene {
 
   private spawnBossAttack(phase: number): void {
     const world = this.currentWorld;
-    const count = Math.min(7, 1 + world.id + (phase >= 2 ? 1 : 0));
+    this.boss.playAttackMotion(this.time.now);
+    const difficultyProjectiles = Math.floor(this.difficultyLevel / 4);
+    const count = Math.min(
+      9,
+      1 + world.id + difficultyProjectiles + (phase >= 2 ? 1 : 0),
+    );
     const baseAngle = Phaser.Math.Angle.Between(
       this.boss.x,
       this.boss.y + 35,
@@ -1128,16 +1221,24 @@ export class GameScene extends Phaser.Scene {
     const spread = world.id === 1 ? 0.55 : 0.82 + world.id * 0.08;
     for (let index = 0; index < count; index += 1) {
       const offset = count === 1 ? 0 : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
-      this.spawnBossProjectile(baseAngle + offset, phase, index);
+      try {
+        this.spawnBossProjectile(baseAngle + offset, phase, index);
+      } catch (error) {
+        console.error('Se omitió un proyectil inválido del gran jefe.', error);
+      }
     }
-    this.emitMuzzleFlash(this.boss.x, this.boss.y + 60, world.color);
-    this.tweens.add({
-      targets: this.boss,
-      scaleX: this.boss.scaleX * 1.08,
-      scaleY: this.boss.scaleY * 0.94,
-      duration: 90,
-      yoyo: true,
-    });
+    try {
+      this.emitMuzzleFlash(this.boss.x, this.boss.y + 60, world.color);
+      this.tweens.add({
+        targets: this.boss,
+        scaleX: this.boss.scaleX * 1.08,
+        scaleY: this.boss.scaleY * 0.94,
+        duration: 90,
+        yoyo: true,
+      });
+    } catch (error) {
+      console.error('Se omitió un efecto visual del gran jefe.', error);
+    }
     audioManager.play(world.id === 2 ? 'blast' : 'enemy');
   }
 
@@ -1181,16 +1282,43 @@ export class GameScene extends Phaser.Scene {
   }
 
   private onProjectileHitBoss(projectile: Phaser.Physics.Arcade.Image, boss: Boss): void {
+    if (!projectile.active || !boss.active || !this.bossActive) {
+      return;
+    }
     const weaponType = projectile.getData('weapon') as WeaponType;
+    const weapon = WEAPONS[weaponType];
+    if (!weapon) {
+      console.error('Se descartó un disparo sin tipo de arma válido.');
+      this.recycleProjectile(projectile);
+      return;
+    }
     const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
     this.recycleProjectile(projectile);
     const defeated = boss.takeHit(damage);
+    const remainingPercent = Math.max(0, Math.ceil(boss.healthRatio * 100));
     this.bossHealthFill.setScale(boss.healthRatio, 1);
-    this.emitSparkle(boss.x, boss.y, WEAPONS[weaponType].color);
-    audioManager.play('shot');
+    this.bossNameText.setText(
+      `⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠  •  VIDA ${remainingPercent}%`,
+    );
+
+    try {
+      this.emitSparkle(projectile.x, projectile.y, weapon.color);
+      audioManager.play('shot');
+    } catch (error) {
+      console.error('Se omitió un efecto visual de daño al jefe.', error);
+    }
     if (defeated) {
       this.defeatBoss();
     }
+  }
+
+  private projectileTouchesBoss(projectile: Phaser.Physics.Arcade.Image): boolean {
+    const horizontalRadius = Math.max(86, this.boss.displayWidth * 0.39);
+    const verticalRadius = Math.max(120, this.boss.displayHeight * 0.43);
+    return (
+      Math.abs(projectile.x - this.boss.x) <= horizontalRadius &&
+      Math.abs(projectile.y - this.boss.y) <= verticalRadius
+    );
   }
 
   private defeatBoss(): void {
@@ -1201,40 +1329,55 @@ export class GameScene extends Phaser.Scene {
     this.bossActive = false;
     this.worldTransitioning = true;
     this.bossHealthFill.setScale(0, 1);
-    this.bossNameText.setText('¡JEFE DERROTADO!').setColor(COLORS_HEX.yellow);
-    const bossBody = this.boss.body as Phaser.Physics.Arcade.Body;
-    bossBody.enable = false;
+    this.bossNameText.setText('¡JEFE DERROTADO!  •  VIDA 0%').setColor(COLORS_HEX.yellow);
+    const bossBody = this.boss.body as Phaser.Physics.Arcade.Body | null;
+    if (bossBody) {
+      bossBody.enable = false;
+      bossBody.setVelocity(0, 0);
+    }
+    this.boss.hideAnimatedParts();
     this.boss.setActive(false);
     this.bossProjectiles.children.each((child) => {
       const projectile = child as Phaser.Physics.Arcade.Image;
       if (projectile.active) this.recycleEnemyProjectile(projectile);
       return true;
     });
+    this.enemies.children.each((child) => {
+      const enemy = child as Enemy;
+      if (enemy.active) enemy.recycle();
+      return true;
+    });
 
     const awardedPoints = this.adjustPointsForDifficulty(defeatedWorld.bossPoints);
     this.score += awardedPoints;
     this.updateHud();
-    this.showFloatingText(this.boss.x, this.boss.y, `+${awardedPoints} • JEFE`, COLORS_HEX.yellow);
-    this.emitShockwave(this.boss.x, this.boss.y, 240, defeatedWorld.color);
-    this.cameras.main.shake(650, 0.022);
-    this.cameras.main.flash(420, 255, 210, 30);
-    audioManager.play('combo');
 
-    this.tweens.add({
-      targets: this.boss,
-      alpha: 0,
-      angle: 24,
-      scaleX: this.boss.scaleX * 1.45,
-      scaleY: this.boss.scaleY * 1.45,
-      duration: 780,
-      ease: 'Cubic.in',
-      onComplete: () => this.boss.recycle(),
-    });
-
+    // Schedule progression before optional effects. Even if a renderer rejects
+    // an effect, the game still advances to the next world or final result.
     if (this.currentWorldIndex >= WORLDS.length - 1) {
       this.time.delayedCall(1850, () => this.finishCampaign());
     } else {
       this.time.delayedCall(1900, () => this.advanceToNextWorld());
+    }
+
+    try {
+      this.showFloatingText(this.boss.x, this.boss.y, `+${awardedPoints} • JEFE`, COLORS_HEX.yellow);
+      this.emitShockwave(this.boss.x, this.boss.y, 240, defeatedWorld.color);
+      this.cameras.main.shake(650, 0.022);
+      audioManager.play('combo');
+      this.tweens.add({
+        targets: this.boss,
+        alpha: 0,
+        angle: 24,
+        scaleX: this.boss.scaleX * 1.45,
+        scaleY: this.boss.scaleY * 1.45,
+        duration: 780,
+        ease: 'Cubic.in',
+        onComplete: () => this.boss.recycle(),
+      });
+    } catch (error) {
+      console.error('Se omitió un efecto de derrota; la campaña continuará.', error);
+      this.boss.recycle();
     }
   }
 
@@ -1369,11 +1512,21 @@ export class GameScene extends Phaser.Scene {
     item.spawn(definition, x, speed);
   }
 
-  private spawnEnemy(): void {
+  private getBossReinforcementDelay(): number {
+    const difficultyReduction = this.difficultyLevel * 420;
+    const worldReduction = this.currentWorld.id * 260;
+    return Phaser.Math.Clamp(
+      9200 - difficultyReduction - worldReduction,
+      3200,
+      8500,
+    );
+  }
+
+  private spawnEnemy(bossSupport = false): void {
     if (
       this.paused ||
       this.gameOver ||
-      this.bossActive ||
+      (this.bossActive && !bossSupport) ||
       this.worldTransitioning ||
       this.enemies.countActive(true) >= this.maxActiveEnemies
     ) {
@@ -1388,19 +1541,24 @@ export class GameScene extends Phaser.Scene {
     }
 
     const x = Phaser.Math.Between(105, GAME_WIDTH - 105);
-    const y = 350 + orderIndex * 118;
+    const y = bossSupport ? 470 + orderIndex * 105 : 350 + orderIndex * 118;
     this.enemySpawnId += 1;
     enemy.spawn(type, x, y, this.time.now, this.enemySpawnId);
 
     const definition = ENEMIES[type];
     const notice = this.add
-      .text(GAME_WIDTH / 2, 292, `⚠ ${definition.label}`, {
+      .text(
+        GAME_WIDTH / 2,
+        292,
+        bossSupport ? `⚠ REFUERZOS DEL JEFE • ${definition.label}` : `⚠ ${definition.label}`,
+        {
         fontFamily: 'Arial Black',
         fontSize: '24px',
         color: definition.colorHex,
         stroke: '#020718',
         strokeThickness: 6,
-      })
+        },
+      )
       .setOrigin(0.5)
       .setDepth(48);
     this.tweens.add({
@@ -1996,6 +2154,12 @@ export class GameScene extends Phaser.Scene {
 
   private clearWeapon(): void {
     if (this.weaponAmmo > 0) {
+      return;
+    }
+    if (this.bossActive && !this.gameOver) {
+      // Boss battles always remain winnable. Special weapons fall back to a
+      // fully loaded integrated blaster instead of leaving the player idle.
+      this.equipStartingWeapon();
       return;
     }
     this.activeWeapon = null;
