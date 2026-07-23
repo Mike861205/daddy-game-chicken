@@ -39,25 +39,174 @@
         </div>
         <div class="topbar__actions">
           <span class="live-pill"><i></i> Configuración activa</span>
+          <span id="current-module-label" class="current-module-label">Inicio</span>
+          <button id="sidebar-toggle" class="button button--secondary sidebar-toggle" type="button" aria-expanded="false">☰ Módulos</button>
           <button id="logout-button" class="button button--ghost" type="button">Cerrar sesión</button>
         </div>
       </header>
 
-      <main class="dashboard">
-        <section class="hero-panel">
-          <div>
-            <p class="eyebrow">CENTRO DE PREMIOS</p>
-            <h2>Convierte cada partida en una visita</h2>
-            <p>Define qué gana el jugador por sus puntos y recibe su solicitud de canje directamente en WhatsApp.</p>
+      <div class="admin-layout">
+        <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="Cerrar menú" hidden></button>
+        <aside id="admin-sidebar" class="admin-sidebar" aria-label="Módulos del Super Admin">
+          <div class="sidebar-heading">
+            <p class="eyebrow">NAVEGACIÓN</p>
+            <strong>Módulos del panel</strong>
           </div>
-          <div class="hero-panel__signal" aria-hidden="true">
-            <span>⚡</span>
-            <strong>PREMIOS<br />EN VIVO</strong>
+          <nav class="sidebar-nav">
+            <button class="sidebar-item is-active" type="button" data-module="overview">
+              <span class="sidebar-item__icon">⌂</span>
+              <span><b>Inicio</b><small>Resumen del panel</small></span>
+            </button>
+            <button class="sidebar-item" type="button" data-module="reports">
+              <span class="sidebar-item__icon">◎</span>
+              <span><b>Informes</b><small>Jugadores y actividad</small></span>
+            </button>
+            <button class="sidebar-item" type="button" data-module="game">
+              <span class="sidebar-item__icon">⚙</span>
+              <span><b>Configuración</b><small>Juego y campaña</small></span>
+            </button>
+            <button class="sidebar-item" type="button" data-module="rewards">
+              <span class="sidebar-item__icon">★</span>
+              <span><b>Premios</b><small>Niveles y descuentos</small></span>
+            </button>
+            <button class="sidebar-item" type="button" data-module="deployment">
+              <span class="sidebar-item__icon">⇧</span>
+              <span><b>Despliegue</b><small>Publicar cambios</small></span>
+            </button>
+          </nav>
+          <div class="sidebar-footer">
+            <i></i><span>Panel privado del dueño</span>
           </div>
-        </section>
+        </aside>
 
-        <form id="config-form">
-          <section class="panel contact-panel">
+        <main class="dashboard">
+          <div class="module-panel" data-module-panel="overview">
+            <section class="hero-panel">
+              <div>
+                <p class="eyebrow">CENTRO DE CONTROL</p>
+                <h2>Todo el juego, organizado por módulos</h2>
+                <p>Consulta resultados, configura la experiencia y administra premios sin mezclar la información.</p>
+              </div>
+              <div class="hero-panel__signal" aria-hidden="true">
+                <span>⚡</span>
+                <strong>CONTROL<br />EN VIVO</strong>
+              </div>
+            </section>
+            <section class="module-shortcuts" aria-label="Accesos rápidos">
+              <button type="button" data-open-module="reports"><span>◎</span><b>Ver informes</b><small>Jugadores, horas y premios</small></button>
+              <button type="button" data-open-module="game"><span>⚙</span><b>Configurar juego</b><small>Dificultad, contacto y campaña</small></button>
+              <button type="button" data-open-module="rewards"><span>★</span><b>Administrar premios</b><small>Niveles, puntos y descuentos</small></button>
+              <button type="button" data-open-module="deployment"><span>⇧</span><b>Publicar cambios</b><small>Push y despliegue seguro</small></button>
+            </section>
+          </div>
+
+          <div class="module-panel" data-module-panel="reports" hidden>
+            <section id="player-reports" class="panel reports-panel">
+          <div class="panel__heading panel__heading--split">
+            <div class="heading-group">
+              <div class="panel__icon panel__icon--reports">◎</div>
+              <div>
+                <p class="eyebrow">INTELIGENCIA DEL JUEGO</p>
+                <h2>Jugadores, actividad y premios</h2>
+              </div>
+            </div>
+            <button id="report-refresh" class="button button--secondary" type="button">↻ Actualizar</button>
+          </div>
+          <p class="section-help reports-help">
+            El periodo filtra la actividad jugada: partidas, tiempo y premios. Cada página muestra
+            20 jugadores y puedes ordenar cualquier columna desde su encabezado.
+          </p>
+
+          <div class="report-metrics" aria-live="polite">
+            <article class="report-metric report-metric--players">
+              <span>Jugadores</span><strong id="metric-players">—</strong><small>registrados o activos</small>
+            </article>
+            <article class="report-metric report-metric--games">
+              <span>Partidas</span><strong id="metric-games">—</strong><small>ingresos al juego</small>
+            </article>
+            <article class="report-metric report-metric--hours">
+              <span>Horas jugadas</span><strong id="metric-hours">—</strong><small>tiempo acumulado</small>
+            </article>
+            <article class="report-metric report-metric--rewards">
+              <span>Premios</span><strong id="metric-rewards">—</strong><small>premios generados</small>
+            </article>
+            <article class="report-metric report-metric--returning">
+              <span>Recurrentes</span><strong id="metric-returning">—</strong><small>jugaron más de una vez</small>
+            </article>
+            <article class="report-metric report-metric--rate">
+              <span>Tasa de premio</span><strong id="metric-reward-rate">—</strong><small>jugadores premiados</small>
+            </article>
+          </div>
+
+          <div class="report-filters">
+            <label class="field">
+              <span>Periodo</span>
+              <select id="report-period">
+                <option value="all">Todo el historial</option>
+                <option value="day">Día específico</option>
+                <option value="month">Mes</option>
+                <option value="year">Año</option>
+                <option value="custom">Rango personalizado</option>
+              </select>
+            </label>
+            <label class="field report-period-control" data-period="day" hidden>
+              <span>Día</span>
+              <input id="report-day" type="date" />
+            </label>
+            <label class="field report-period-control" data-period="month" hidden>
+              <span>Mes</span>
+              <input id="report-month" type="month" />
+            </label>
+            <label class="field report-period-control" data-period="year" hidden>
+              <span>Año</span>
+              <input id="report-year" type="number" min="2020" max="2100" step="1" />
+            </label>
+            <div class="report-custom-range report-period-control" data-period="custom" hidden>
+              <label class="field"><span>Desde</span><input id="report-from" type="date" /></label>
+              <label class="field"><span>Hasta</span><input id="report-to" type="date" /></label>
+            </div>
+            <label class="field report-search-field">
+              <span>Buscar jugador</span>
+              <input id="report-search" type="search" maxlength="80" placeholder="Avatar, nombre o teléfono" />
+            </label>
+            <button id="report-apply" class="button button--primary report-apply" type="button">Aplicar filtros</button>
+          </div>
+
+          <div class="report-table-shell">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th><button type="button" data-sort="createdAt">Fecha registro <i></i></button></th>
+                  <th><button type="button" data-sort="nickname">Avatar <i></i></button></th>
+                  <th><button type="button" data-sort="name">Nombre <i></i></button></th>
+                  <th><button type="button" data-sort="phone">Teléfono <i></i></button></th>
+                  <th><button type="button" data-sort="gameCount">Partidas <i></i></button></th>
+                  <th><button type="button" data-sort="totalDurationSeconds">Horas <i></i></button></th>
+                  <th><button type="button" data-sort="bestScore">Récord <i></i></button></th>
+                  <th><button type="button" data-sort="rewardCount">Premios <i></i></button></th>
+                  <th><button type="button" data-sort="lastPlayedAt">Última partida <i></i></button></th>
+                </tr>
+              </thead>
+              <tbody id="report-players-body"></tbody>
+            </table>
+          </div>
+          <p id="report-status" class="report-status" role="status">Cargando informe…</p>
+          <div class="report-pagination">
+            <button id="report-previous" class="button button--ghost" type="button">← Anterior</button>
+            <strong id="report-page">Página 1 de 1</strong>
+            <button id="report-next" class="button button--ghost" type="button">Siguiente →</button>
+          </div>
+            </section>
+          </div>
+
+          <form id="config-form" class="config-modules">
+            <div class="module-panel" data-module-panel="game" hidden>
+              <header class="module-header">
+                <p class="eyebrow">CONFIGURACIÓN DEL JUEGO</p>
+                <h2>Experiencia, contacto y campaña</h2>
+                <p>Ajusta únicamente el funcionamiento general del juego.</p>
+              </header>
+              <section class="panel contact-panel">
             <div class="panel__heading">
               <div class="panel__icon panel__icon--green">✆</div>
               <div>
@@ -77,9 +226,9 @@
                 <small>168 horas equivalen a 7 días.</small>
               </label>
             </div>
-          </section>
+              </section>
 
-          <section class="panel difficulty-panel">
+              <section class="panel difficulty-panel">
             <div class="panel__heading panel__heading--split">
               <div class="heading-group">
                 <div class="panel__icon panel__icon--difficulty">10</div>
@@ -102,9 +251,9 @@
                 <div id="difficulty-effects" class="difficulty-effects"></div>
               </div>
             </div>
-          </section>
+              </section>
 
-          <section class="panel campaign-panel">
+              <section class="panel campaign-panel">
             <div class="panel__heading panel__heading--split">
               <div class="heading-group">
                 <div class="panel__icon panel__icon--campaign">5</div>
@@ -133,9 +282,16 @@
                 <span><b>5</b>Fortaleza Omega</span>
               </div>
             </div>
-          </section>
+              </section>
+            </div>
 
-          <section class="panel rewards-panel">
+            <div class="module-panel" data-module-panel="rewards" hidden>
+              <header class="module-header">
+                <p class="eyebrow">ADMINISTRACIÓN DE PREMIOS</p>
+                <h2>Niveles, rangos y beneficios</h2>
+                <p>Define qué obtiene cada jugador según su puntaje.</p>
+              </header>
+              <section class="panel rewards-panel">
             <div class="panel__heading panel__heading--split">
               <div class="heading-group">
                 <div class="panel__icon panel__icon--yellow">★</div>
@@ -148,18 +304,30 @@
             </div>
             <p class="section-help">Agrega, elimina y nombra cada nivel manualmente. Cada rango determina el premio; los puntos no deben cruzarse.</p>
             <div id="tiers-list" class="tiers-list"></div>
-          </section>
+              </section>
+            </div>
 
-          <div class="save-bar">
+            <div id="save-bar" class="save-bar" hidden>
             <div>
               <strong>Los cambios se aplican en las nuevas partidas</strong>
               <span id="save-message" class="form-message" role="status"></span>
             </div>
             <button id="save-button" class="button button--primary button--save" type="submit">Guardar configuración</button>
-          </div>
-        </form>
+            </div>
+          </form>
 
-        <section id="deployment-panel" class="panel deployment-panel" hidden>
+          <div class="module-panel" data-module-panel="deployment" hidden>
+            <header class="module-header">
+              <p class="eyebrow">PUBLICACIÓN DEL SISTEMA</p>
+              <h2>Despliegue a producción</h2>
+              <p>Este espacio está separado de la configuración para evitar publicaciones accidentales.</p>
+            </header>
+            <div id="deployment-unavailable" class="module-empty" hidden>
+              <span>⇧</span>
+              <h3>Despliegue disponible únicamente en el entorno local autorizado</h3>
+              <p>La configuración de producción permanece protegida.</p>
+            </div>
+            <section id="deployment-panel" class="panel deployment-panel" hidden>
           <div class="panel__heading panel__heading--split">
             <div class="heading-group">
               <div class="panel__icon panel__icon--deploy">⇧</div>
@@ -188,8 +356,10 @@
             <span id="deployment-commit"></span>
           </div>
           <pre id="deployment-logs" class="deployment-logs" aria-live="polite">Sin ejecuciones todavía.</pre>
-        </section>
-      </main>
+            </section>
+          </div>
+        </main>
+      </div>
     </div>
 
     <div id="deployment-confirm-modal" class="deployment-modal" hidden aria-hidden="true">

@@ -33,6 +33,11 @@ describe('Super Admin', () => {
     expect(response.status).toBe(401);
   });
 
+  it('blocks player reports without an owner session', async () => {
+    const response = await request(app).get('/api/admin/reports/players');
+    expect(response.status).toBe(401);
+  });
+
   it('rejects an incorrect owner password', async () => {
     const response = await request(app).post('/api/admin/login').send({
       username: 'mike',
@@ -121,6 +126,70 @@ describe('Super Admin', () => {
     });
     expect(start.status).toBe(404);
   });
+
+  it('returns paginated player activity and success metrics', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({ username: 'mike', password: 'mike1986' });
+    const now = new Date();
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          totalPlayers: 1,
+          totalSessions: 3,
+          totalDurationSeconds: 5400,
+          totalRewards: 2,
+          returningPlayers: 1,
+          rewardedPlayers: 1,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'player-1',
+          createdAt: now,
+          name: 'Ana López',
+          nickname: 'DaddyAna',
+          phone: '6241234567',
+          gameCount: 3,
+          totalDurationSeconds: 5400,
+          bestScore: 11_000,
+          rewardCount: 2,
+          rewardLabels: '10% de descuento',
+          lastPlayedAt: now,
+        },
+      ]);
+
+    const response = await agent.get(
+      '/api/admin/reports/players?page=1&sortBy=gameCount&sortOrder=desc',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.summary).toMatchObject({
+      totalPlayers: 1,
+      totalSessions: 3,
+      totalRewards: 2,
+      rewardRate: 100,
+    });
+    expect(response.body.data.players[0]).toMatchObject({
+      nickname: 'DaddyAna',
+      gameCount: 3,
+      bestScore: 11_000,
+    });
+    expect(response.body.data.pagination).toEqual({
+      page: 1,
+      pageSize: 20,
+      totalPlayers: 1,
+      totalPages: 1,
+    });
+  });
+
+  it('rejects incomplete custom report ranges', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({ username: 'mike', password: 'mike1986' });
+    const response = await agent.get(
+      '/api/admin/reports/players?from=2026-07-01T00:00:00.000Z',
+    );
+    expect(response.status).toBe(400);
+  });
 });
 
 describe('GET /api/health', () => {
@@ -142,13 +211,21 @@ describe('GET /api/health', () => {
 
 describe('GET /api/leaderboard', () => {
   it('returns leaderboard entries', async () => {
-    prismaMock.gameSession.findMany.mockResolvedValue([
-      { nickname: 'Ana', score: 4000, selectedBranch: 'auroras', createdAt: new Date() },
+    prismaMock.$queryRaw.mockResolvedValue([
+      {
+        nickname: 'Ana',
+        score: 4000,
+        selectedBranch: 'san-jose',
+        createdAt: new Date(),
+        totalEntries: 1,
+      },
     ]);
     const response = await request(app).get('/api/leaderboard');
     expect(response.status).toBe(200);
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].rank).toBe(1);
+    expect(response.body.data[0].premium).toBe(true);
+    expect(response.body.pagination.pageSize).toBe(50);
   });
 
   it('rejects an invalid branch filter', async () => {

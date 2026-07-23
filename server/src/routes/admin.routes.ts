@@ -14,6 +14,7 @@ import {
   getDeploymentStatusHandler,
   startDeploymentHandler,
 } from '../controllers/deployment.controller.js';
+import { getAdminPlayerReportHandler } from '../controllers/adminReport.controller.js';
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.post('/logout', asyncHandler(logoutAdmin));
 router.get('/session', asyncHandler(getAdminSession));
 router.get('/configuration', requireAdmin, asyncHandler(getAdminConfiguration));
 router.put('/configuration', requireAdmin, asyncHandler(updateAdminConfiguration));
+router.get('/reports/players', requireAdmin, asyncHandler(getAdminPlayerReportHandler));
 router.get('/deployment', requireAdmin, asyncHandler(getDeploymentStatusHandler));
 router.post(
   '/deployment',

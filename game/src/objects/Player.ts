@@ -13,6 +13,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private baseScaleX: number;
   private baseScaleY: number;
   private readonly groundY: number;
+  private readonly jumpSpeed = 930;
+  private readonly jumpGravity = 2450;
+  private jumpVelocity = 0;
+  private jumping = false;
   private celebrateUntil = 0;
   private recoilUntil = 0;
   private hitUntil = 0;
@@ -90,7 +94,57 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setVelocityX(0);
   }
 
-  update(): void {
+  /** Start a real jump when Daddy Pollo is standing on the ground. */
+  jump(): boolean {
+    if (this.jumping || this.covering) {
+      return false;
+    }
+    this.jumping = true;
+    this.jumpVelocity = -this.jumpSpeed;
+    return true;
+  }
+
+  isJumping(): boolean {
+    return this.jumping;
+  }
+
+  /** Temporarily hand visual control to the between-world cinematic. */
+  beginCinematicFlight(): void {
+    this.clearTarget();
+    this.setCovering(false);
+    this.jumping = false;
+    this.jumpVelocity = 0;
+    this.hideShield();
+    this.shadow.setVisible(false);
+    this.stop();
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.setVelocity(0, 0);
+    body.enable = false;
+  }
+
+  /** Restore normal physics and presentation after landing in a new world. */
+  endCinematicFlight(): void {
+    this.targetX = null;
+    this.covering = false;
+    this.y = this.groundY;
+    this.angle = 0;
+    this.alpha = 1;
+    this.setScale(this.baseScaleX, this.baseScaleY);
+    this.shadow
+      .setPosition(this.x, this.groundY + 7)
+      .setScale(1)
+      .setAlpha(0.42)
+      .setVisible(true);
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    body.reset(this.x, this.groundY);
+    body.setVelocity(0, 0);
+    body.setCollideWorldBounds(true);
+    this.visualState = '';
+    this.updateCharacterAnimation(0, this.scene.time.now);
+  }
+
+  update(delta = 16.67): void {
     if (this.targetX !== null) {
       const dx = this.targetX - this.x;
       if (Math.abs(dx) < 6) {
@@ -115,13 +169,23 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setFlipX(this.facingDirection < 0);
     this.updateCharacterAnimation(speedRatio, now);
 
-    // A short vertical stride makes the two running poses read as a real gait
-    // instead of a sticker sliding horizontally. The physics body follows the
-    // small hop, while the shadow stays planted on the ground.
-    const stride = Math.sin(now * 0.026);
-    const runningHop = speedRatio > 0.08 ? Math.max(0, stride) * 7 * speedRatio : 0;
-    const celebrateHop = celebrating ? Math.abs(Math.sin(now * 0.022)) * 9 : 0;
-    this.y = Phaser.Math.Linear(this.y, this.groundY - runningHop - celebrateHop, 0.42);
+    // The jump uses its own vertical velocity because the rest of the game
+    // intentionally runs with global gravity disabled.
+    if (this.jumping) {
+      const seconds = Phaser.Math.Clamp(delta, 0, 50) / 1000;
+      this.jumpVelocity += this.jumpGravity * seconds;
+      this.y += this.jumpVelocity * seconds;
+      if (this.y >= this.groundY) {
+        this.y = this.groundY;
+        this.jumpVelocity = 0;
+        this.jumping = false;
+      }
+    } else {
+      const stride = Math.sin(now * 0.026);
+      const runningHop = speedRatio > 0.08 ? Math.max(0, stride) * 7 * speedRatio : 0;
+      const celebrateHop = celebrating ? Math.abs(Math.sin(now * 0.022)) * 9 : 0;
+      this.y = Phaser.Math.Linear(this.y, this.groundY - runningHop - celebrateHop, 0.42);
+    }
 
     const stretch = celebrating ? Math.abs(Math.sin(clock * 1.8)) * 0.14 : speedRatio * 0.045;
     const recoilSquash = recoil ? 0.1 : 0;
@@ -140,7 +204,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     );
 
     const shadowPulse = 1 - Math.abs(breathing) * 0.06;
-    const airborne = Phaser.Math.Clamp((this.groundY - this.y) / 12, 0, 1);
+    const airborne = Phaser.Math.Clamp((this.groundY - this.y) / 240, 0, 1);
     this.shadow
       .setPosition(this.x, this.groundY + 7)
       .setScale(
@@ -188,6 +252,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   setCovering(active: boolean): void {
+    if (active && this.jumping) {
+      return;
+    }
     if (this.covering === active) {
       return;
     }

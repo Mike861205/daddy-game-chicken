@@ -100,6 +100,8 @@ export class GameScene extends Phaser.Scene {
   private equippedWeaponSprite?: Phaser.GameObjects.Image;
   private backgroundImage?: Phaser.GameObjects.Image;
   private worldColorOverlay?: Phaser.GameObjects.Rectangle;
+  private worldTransitionOverlay?: Phaser.GameObjects.Container;
+  private worldTransitionTrail?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   // Timers.
   private spawnTimer?: Phaser.Time.TimerEvent;
@@ -109,6 +111,7 @@ export class GameScene extends Phaser.Scene {
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private keyA?: Phaser.Input.Keyboard.Key;
   private keyD?: Phaser.Input.Keyboard.Key;
+  private keyW?: Phaser.Input.Keyboard.Key;
   private keySpace?: Phaser.Input.Keyboard.Key;
   private keyF?: Phaser.Input.Keyboard.Key;
   private keyS?: Phaser.Input.Keyboard.Key;
@@ -586,6 +589,7 @@ export class GameScene extends Phaser.Scene {
     // the HTML registration fields after leaving a match.
     this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A, false);
     this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D, false);
+    this.keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W, false);
     this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
     this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F, false);
     this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S, false);
@@ -598,25 +602,35 @@ export class GameScene extends Phaser.Scene {
     const btnY = GAME_HEIGHT - 90;
     const leftBtn = this.makeControlButton(78, btnY, '◀');
     const rightBtn = this.makeControlButton(GAME_WIDTH - 78, btnY, '▶');
-    const coverBtn = this.makeCoverButton(238, btnY);
-    const fireBtn = this.makeFireButton(482, btnY);
+    const coverBtn = this.makeCoverButton(226, btnY);
+    const jumpBtn = this.makeJumpButton(GAME_WIDTH / 2, btnY);
+    const fireBtn = this.makeFireButton(GAME_WIDTH - 226, btnY);
 
     this.bindHoldControl(leftBtn, this.leftTouchPointers);
     this.bindHoldControl(rightBtn, this.rightTouchPointers);
     this.bindHoldControl(fireBtn, this.fireTouchPointers, () => this.tryFireWeapon(true));
     this.bindHoldControl(coverBtn, this.coverTouchPointers);
+    this.bindTapControl(jumpBtn, () => this.tryJump());
 
     // Tap or drag anywhere in the play area to move the player. Tracking one
     // pointer keeps a second finger on FIRE/COVER from cancelling movement.
     this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.y < GAME_HEIGHT - 175 && this.dragPointerId === null) {
+      if (
+        !this.worldTransitioning &&
+        pointer.y < GAME_HEIGHT - 175 &&
+        this.dragPointerId === null
+      ) {
         this.dragging = true;
         this.dragPointerId = pointer.id;
         this.player.moveToward(pointer.x);
       }
     });
     this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => {
-      if (pointer.isDown && pointer.id === this.dragPointerId) {
+      if (
+        !this.worldTransitioning &&
+        pointer.isDown &&
+        pointer.id === this.dragPointerId
+      ) {
         this.player.moveToward(pointer.x);
       }
     });
@@ -657,6 +671,20 @@ export class GameScene extends Phaser.Scene {
     control.hitZone.on('pointerout', (pointer: Phaser.Input.Pointer) => {
       if (pointer.isDown) release(pointer);
     });
+  }
+
+  private bindTapControl(control: TouchControl, onPress: () => void): void {
+    control.hitZone.on('pointerdown', () => {
+      control.visual.setScale(0.9);
+      onPress();
+      this.triggerControlHaptic();
+    });
+    const release = (): void => {
+      control.visual.setScale(1);
+    };
+    control.hitZone.on('pointerup', release);
+    control.hitZone.on('pointerupoutside', release);
+    control.hitZone.on('pointerout', release);
   }
 
   private releaseTouchPointer(pointerId: number): void {
@@ -736,6 +764,46 @@ export class GameScene extends Phaser.Scene {
     return {
       visual: container,
       hitZone: this.createTouchHitZone(x, y, 156),
+    };
+  }
+
+  private makeJumpButton(x: number, y: number): TouchControl {
+    const container = this.add.container(x, y).setDepth(32).setScrollFactor(0);
+    const glow = this.add.circle(0, 0, 53, COLORS.green, 0.2);
+    const button = this.add
+      .circle(0, 0, 47, COLORS.green, 0.96)
+      .setStrokeStyle(4, COLORS.white, 1);
+    const icon = this.add
+      .text(0, -8, '↑', {
+        fontFamily: 'Arial Black',
+        fontSize: '43px',
+        color: COLORS_HEX.white,
+        stroke: '#06143a',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
+    const label = this.add
+      .text(0, 27, 'SALTO', {
+        fontFamily: 'Arial Black',
+        fontSize: '13px',
+        color: COLORS_HEX.yellow,
+        stroke: '#06143a',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+    container.add([glow, button, icon, label]);
+    container.setSize(108, 108);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.12, to: 0.36 },
+      scale: { from: 0.9, to: 1.08 },
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+    });
+    return {
+      visual: container,
+      hitZone: this.createTouchHitZone(x, y, 108),
     };
   }
 
@@ -889,6 +957,12 @@ export class GameScene extends Phaser.Scene {
     if (this.paused || this.gameOver) {
       return;
     }
+    // Tweens own Daddy Pollo and both backgrounds during the cinematic.
+    // Skipping regular gameplay prevents controls or collisions from
+    // interrupting takeoff and landing.
+    if (this.worldTransitioning) {
+      return;
+    }
 
     try {
       // A mobile browser can leave Arcade Physics paused after an interruption
@@ -902,6 +976,12 @@ export class GameScene extends Phaser.Scene {
       const right = this.rightPressed || this.rightTouchPointers.size > 0 || this.cursors?.right.isDown || this.keyD?.isDown;
       const wantsCover = Boolean(this.coverPressed || this.coverTouchPointers.size > 0 || this.keyS?.isDown || this.keyShift?.isDown);
       this.updateCover(wantsCover, delta);
+      const keyboardJump =
+        (this.cursors ? Phaser.Input.Keyboard.JustDown(this.cursors.up) : false) ||
+        (this.keyW ? Phaser.Input.Keyboard.JustDown(this.keyW) : false);
+      if (keyboardJump) {
+        this.tryJump();
+      }
 
     if (this.player.isCovering()) {
       this.player.stopMoving();
@@ -914,7 +994,7 @@ export class GameScene extends Phaser.Scene {
         this.player.stopMoving();
       }
     }
-    this.player.update();
+    this.player.update(delta);
 
     const wantsToFire = this.firePressed || this.fireTouchPointers.size > 0 || this.keySpace?.isDown || this.keyF?.isDown;
     if (wantsToFire && !this.player.isCovering()) {
@@ -1382,11 +1462,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private advanceToNextWorld(): void {
+    const previousWorld = this.currentWorld;
     this.currentWorldIndex += 1;
+    const nextWorld = this.currentWorld;
     this.worldPaceStage = 0;
     this.timeLeft = this.getBossArrivalSeconds();
     this.refreshWorldPace();
-    this.transitionWorldBackground(this.currentWorld);
+    this.transitionWorldBackground(nextWorld);
     this.bossNameText.setVisible(false);
     this.bossHealthBg.setVisible(false);
     this.bossHealthFill.setVisible(false);
@@ -1400,38 +1482,294 @@ export class GameScene extends Phaser.Scene {
       this.equipStartingWeapon();
     }
     this.updateHud();
+    this.clearTouchControls();
+    this.playWorldTransitionCinematic(previousWorld, nextWorld);
+  }
 
-    const worldIntro = this.add
-      .text(
-        GAME_WIDTH / 2,
-        GAME_HEIGHT / 2,
-        `MUNDO ${this.currentWorld.id}\n${this.currentWorld.name.toUpperCase()}\n${this.currentWorld.subtitle}`,
-        {
+  private playWorldTransitionCinematic(
+    previousWorld: WorldDefinition,
+    nextWorld: WorldDefinition,
+  ): void {
+    let completed = false;
+    const hadShield = this.isPowerActive('shield');
+    const groundY = GAME_HEIGHT - 150;
+    const originalScaleX = this.player.scaleX;
+    const originalScaleY = this.player.scaleY;
+
+    const finishTransition = (): void => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      this.tweens.killTweensOf(this.player);
+      this.worldTransitionTrail?.destroy();
+      this.worldTransitionTrail = undefined;
+      this.worldTransitionOverlay?.destroy();
+      this.worldTransitionOverlay = undefined;
+      this.player
+        .setPosition(Phaser.Math.Clamp(this.player.x, 110, GAME_WIDTH - 110), groundY)
+        .setDepth(5);
+      this.player.endCinematicFlight();
+      if (hadShield && this.isPowerActive('shield')) {
+        this.player.showShield();
+      }
+      this.equippedWeaponSprite?.setVisible(true);
+      this.worldTransitioning = false;
+      this.startWorldTimers();
+      this.spawnWeaponPickup();
+      this.updateEquippedWeaponSprite();
+    };
+
+    try {
+      this.worldTransitionOverlay?.destroy();
+      this.worldTransitionTrail?.destroy();
+      this.tweens.killTweensOf(this.player);
+      this.player.beginCinematicFlight();
+      this.player
+        .setPosition(this.player.x, groundY)
+        .setAngle(0)
+        .setAlpha(1)
+        .setDepth(75);
+      this.equippedWeaponSprite?.setVisible(false);
+
+      const previousTexture = this.textures.exists(previousWorld.backgroundKey)
+        ? previousWorld.backgroundKey
+        : 'fondo-los-cabos';
+      const nextTexture = this.textures.exists(nextWorld.backgroundKey)
+        ? nextWorld.backgroundKey
+        : previousTexture;
+      const overlay = this.add.container(0, 0).setDepth(60).setAlpha(0);
+      this.worldTransitionOverlay = overlay;
+
+      const outgoing = this.add
+        .image(GAME_WIDTH / 2, GAME_HEIGHT / 2, previousTexture)
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+      const incoming = this.add
+        .image(GAME_WIDTH * 1.5, GAME_HEIGHT / 2, nextTexture)
+        .setDisplaySize(GAME_WIDTH, GAME_HEIGHT);
+      const colorWash = this.add
+        .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, previousWorld.color, 0.13)
+        .setOrigin(0);
+      const vignette = this.add
+        .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x020718, 0.18)
+        .setOrigin(0);
+      const landingLine = this.add
+        .rectangle(GAME_WIDTH / 2, GAME_HEIGHT - 126, GAME_WIDTH, 9, nextWorld.color, 0)
+        .setStrokeStyle(2, COLORS.white, 0);
+      const landingGlow = this.add
+        .ellipse(GAME_WIDTH / 2, groundY + 18, 210, 54, nextWorld.color, 0)
+        .setStrokeStyle(5, COLORS.white, 0);
+
+      overlay.add([outgoing, incoming, colorWash, vignette]);
+
+      for (let index = 0; index < 18; index += 1) {
+        const width = 45 + (index % 5) * 24;
+        const streak = this.add
+          .rectangle(
+            GAME_WIDTH + Phaser.Math.Between(20, 420),
+            Phaser.Math.Between(210, GAME_HEIGHT - 210),
+            width,
+            index % 3 === 0 ? 4 : 2,
+            index % 2 === 0 ? previousWorld.color : nextWorld.color,
+            0,
+          )
+          .setOrigin(0, 0.5);
+        overlay.add(streak);
+        this.tweens.add({
+          targets: streak,
+          x: -width - 80,
+          alpha: { from: 0, to: 0.82 },
+          duration: 760 + (index % 6) * 95,
+          delay: 620 + index * 35,
+          repeat: 2,
+          ease: 'Linear',
+        });
+      }
+
+      const topBar = this.add
+        .rectangle(0, 0, GAME_WIDTH, 126, 0x020718, 0.94)
+        .setOrigin(0);
+      const bottomBar = this.add
+        .rectangle(0, GAME_HEIGHT - 142, GAME_WIDTH, 142, 0x020718, 0.94)
+        .setOrigin(0);
+      const chapter = this.add
+        .text(GAME_WIDTH / 2, 48, `MUNDO ${previousWorld.id} SUPERADO`, {
           fontFamily: 'Arial Black',
-          fontSize: '52px',
-          color: this.currentWorld.colorHex,
+          fontSize: '21px',
+          color: COLORS_HEX.yellow,
+          letterSpacing: 2,
+        })
+        .setOrigin(0.5);
+      const destination = this.add
+        .text(
+          GAME_WIDTH / 2,
+          86,
+          `${previousWorld.name.toUpperCase()}  →  ${nextWorld.name.toUpperCase()}`,
+          {
+            fontFamily: 'Arial Black',
+            fontSize: '18px',
+            color: '#ffffff',
+            stroke: '#020718',
+            strokeThickness: 4,
+          },
+        )
+        .setOrigin(0.5);
+      const route = WORLDS.map((world) => {
+        if (world.id < nextWorld.id) return '●';
+        if (world.id === nextWorld.id) return '◉';
+        return '○';
+      }).join('  ');
+      const routeText = this.add
+        .text(GAME_WIDTH / 2, GAME_HEIGHT - 92, route, {
+          fontFamily: 'Arial Black',
+          fontSize: '29px',
+          color: nextWorld.colorHex,
           stroke: '#020718',
-          strokeThickness: 9,
-          align: 'center',
+          strokeThickness: 4,
+        })
+        .setOrigin(0.5);
+      const flightLabel = this.add
+        .text(GAME_WIDTH / 2, GAME_HEIGHT - 45, 'DADDY POLLO EN RUTA', {
+          fontFamily: 'Arial Black',
+          fontSize: '16px',
+          color: '#ffffff',
+          letterSpacing: 3,
+        })
+        .setOrigin(0.5);
+      overlay.add([
+        landingLine,
+        landingGlow,
+        topBar,
+        bottomBar,
+        chapter,
+        destination,
+        routeText,
+        flightLabel,
+      ]);
+
+      this.worldTransitionTrail = this.add
+        .particles(0, 0, '__WHITE', {
+          follow: this.player,
+          lifespan: { min: 260, max: 520 },
+          frequency: 24,
+          speedX: { min: -150, max: -45 },
+          speedY: { min: -28, max: 28 },
+          scale: { start: 0.42, end: 0 },
+          alpha: { start: 0.9, end: 0 },
+          tint: [COLORS.yellow, previousWorld.color, nextWorld.color, 0xffffff],
+          blendMode: 'ADD',
+        })
+        .setDepth(72);
+
+      this.tweens.add({
+        targets: overlay,
+        alpha: 1,
+        duration: 260,
+        ease: 'Sine.out',
+      });
+      audioManager.play('power');
+
+      this.tweens.add({
+        targets: this.player,
+        x: GAME_WIDTH * 0.28,
+        y: GAME_HEIGHT * 0.43,
+        angle: -14,
+        scaleX: originalScaleX * 0.86,
+        scaleY: originalScaleY * 0.86,
+        duration: 820,
+        delay: 180,
+        ease: 'Back.in',
+        onComplete: () => {
+          flightLabel.setText(`VOLANDO AL MUNDO ${nextWorld.id}`);
+          this.tweens.add({
+            targets: [outgoing, incoming],
+            x: `-=${GAME_WIDTH}`,
+            duration: 1480,
+            ease: 'Cubic.inOut',
+            onUpdate: (_tween, target: Phaser.GameObjects.Image) => {
+              const progress = Phaser.Math.Clamp(
+                (GAME_WIDTH / 2 - outgoing.x) / GAME_WIDTH,
+                0,
+                1,
+              );
+              colorWash.setFillStyle(
+                Phaser.Display.Color.Interpolate.ColorWithColor(
+                  Phaser.Display.Color.ValueToColor(previousWorld.color),
+                  Phaser.Display.Color.ValueToColor(nextWorld.color),
+                  100,
+                  Math.round(progress * 100),
+                ).color,
+                0.13,
+              );
+              void target;
+            },
+            onComplete: () => {
+              destination.setText(
+                `MUNDO ${nextWorld.id}  •  ${nextWorld.name.toUpperCase()}`,
+              );
+              flightLabel.setText(nextWorld.subtitle.toUpperCase());
+              landingLine.setFillStyle(nextWorld.color, 0.95);
+              landingLine.setStrokeStyle(2, COLORS.white, 0.72);
+              landingGlow.setFillStyle(nextWorld.color, 0.34);
+              landingGlow.setStrokeStyle(5, COLORS.white, 0.68);
+              this.tweens.add({
+                targets: landingGlow,
+                scaleX: { from: 0.25, to: 1.25 },
+                alpha: { from: 0, to: 0.72 },
+                duration: 720,
+                ease: 'Cubic.out',
+              });
+              this.tweens.add({
+                targets: this.player,
+                x: GAME_WIDTH / 2,
+                y: groundY,
+                angle: 0,
+                scaleX: originalScaleX,
+                scaleY: originalScaleY,
+                duration: 980,
+                ease: 'Bounce.out',
+                onComplete: () => {
+                  audioManager.play('catch');
+                  this.cameras.main.shake(180, 0.008);
+                  this.cameras.main.flash(220, 255, 255, 255, false);
+                  this.worldTransitionTrail?.stop();
+                  this.player.endCinematicFlight();
+                  if (hadShield && this.isPowerActive('shield')) {
+                    this.player.showShield();
+                  }
+                  this.equippedWeaponSprite?.setVisible(true);
+                  flightLabel.setText('¡ATERRIZAJE COMPLETADO!');
+                  this.tweens.add({
+                    targets: overlay,
+                    alpha: 0,
+                    duration: 420,
+                    delay: 360,
+                    ease: 'Sine.in',
+                    onComplete: finishTransition,
+                  });
+                },
+              });
+            },
+          });
+          this.tweens.add({
+            targets: this.player,
+            x: GAME_WIDTH * 0.76,
+            y: GAME_HEIGHT * 0.27,
+            angle: 13,
+            scaleX: originalScaleX * 0.72,
+            scaleY: originalScaleY * 0.72,
+            duration: 1480,
+            ease: 'Sine.inOut',
+          });
         },
-      )
-      .setOrigin(0.5)
-      .setDepth(70);
-    this.tweens.add({
-      targets: worldIntro,
-      y: GAME_HEIGHT / 2 - 40,
-      alpha: { from: 0, to: 1 },
-      scale: { from: 0.72, to: 1 },
-      duration: 620,
-      yoyo: true,
-      hold: 720,
-      onComplete: () => {
-        worldIntro.destroy();
-        this.worldTransitioning = false;
-        this.startWorldTimers();
-        this.spawnWeaponPickup();
-      },
-    });
+      });
+
+      // A renderer interruption must never leave campaign progression locked.
+      this.time.delayedCall(6200, finishTransition);
+    } catch (error) {
+      console.error('Se omitió la cinemática entre mundos; la campaña continuará.', error);
+      finishTransition();
+    }
   }
 
   private finishCampaign(): void {
@@ -1767,6 +2105,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private updateCover(requested: boolean, delta: number): void {
+    if (this.player.isJumping()) {
+      requested = false;
+    }
     if (requested && !this.coverBroken && this.coverEnergy > 0) {
       this.player.setCovering(true);
       this.coverEnergy = Math.max(0, this.coverEnergy - delta * 0.032 * this.coverDrainMultiplier);
@@ -1968,7 +2309,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private tryFireWeapon(fromFreshPress = false): void {
-    if (this.paused || this.gameOver) {
+    if (this.paused || this.gameOver || this.worldTransitioning) {
       return;
     }
     if (!this.activeWeapon || this.weaponAmmo <= 0) {
@@ -2017,6 +2358,20 @@ export class GameScene extends Phaser.Scene {
 
     if (this.weaponAmmo <= 0) {
       this.time.delayedCall(180, () => this.clearWeapon());
+    }
+  }
+
+  private tryJump(): void {
+    if (
+      this.paused ||
+      this.gameOver ||
+      this.worldTransitioning ||
+      this.player.isCovering()
+    ) {
+      return;
+    }
+    if (this.player.jump()) {
+      this.showFloatingText(this.player.x, this.player.y - 120, '¡SALTO!', COLORS_HEX.neon);
     }
   }
 
@@ -2300,7 +2655,7 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private togglePause(): void {
-    if (this.gameOver) {
+    if (this.gameOver || this.worldTransitioning) {
       return;
     }
     this.paused = !this.paused;
@@ -2388,5 +2743,7 @@ export class GameScene extends Phaser.Scene {
     this.dragPointerId = null;
     this.pauseOverlay = undefined;
     this.equippedWeaponSprite = undefined;
+    this.worldTransitionOverlay = undefined;
+    this.worldTransitionTrail = undefined;
   }
 }

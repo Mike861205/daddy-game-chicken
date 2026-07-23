@@ -223,16 +223,23 @@ export class MenuScene extends Phaser.Scene {
     audioManager.unlock();
     const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
     const branches = config?.branches ?? [];
+    const rememberedPhone = storage.getPlayerPhone();
 
     let openRegistrationNext = false;
     try {
+      // Recognize the last registered player on this browser. The server still
+      // confirms that the remembered phone belongs to an existing account.
+      const rememberedPlayer = rememberedPhone
+        ? await api.lookupPlayer(rememberedPhone)
+        : null;
       const result = await showReturningPlayerForm(
         branches,
         (phone) => api.lookupPlayer(phone),
         {
-          phone: '',
+          phone: rememberedPhone,
           branch: storage.getBranch() ?? branches[0]?.id ?? '',
         },
+        rememberedPlayer,
       );
 
       if (result === 'register') {
@@ -265,6 +272,7 @@ export class MenuScene extends Phaser.Scene {
     this.registry.set(REGISTRY.selectedBranch, data.branch);
     storage.setNickname(data.avatar);
     storage.setBranch(data.branch);
+    storage.setPlayerPhone(data.phone);
 
     audioManager.play('click');
     removeRegistrationOverlays();

@@ -1,6 +1,7 @@
 import type {
   GameResult,
   LeaderboardEntry,
+  LeaderboardPage,
   PublicConfig,
   RewardResponse,
   SubmitResponse,
@@ -107,13 +108,28 @@ export const api = {
     return response.data;
   },
 
-  async getLeaderboard(branch?: string): Promise<LeaderboardEntry[]> {
-    const query = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+  async getLeaderboard(branch?: string, page = 1): Promise<LeaderboardPage> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: '50',
+    });
+    if (branch) {
+      params.set('branch', branch);
+    }
     try {
-      const response = await request<{ data: LeaderboardEntry[] }>(`/leaderboard${query}`);
-      return response.data;
+      const response = await request<{
+        data: LeaderboardEntry[];
+        pagination: LeaderboardPage['pagination'];
+      }>(`/leaderboard?${params.toString()}`);
+      return {
+        entries: response.data,
+        pagination: response.pagination,
+      };
     } catch {
-      return [];
+      return {
+        entries: [],
+        pagination: { page, pageSize: 50, totalEntries: 0, totalPages: 1 },
+      };
     }
   },
 

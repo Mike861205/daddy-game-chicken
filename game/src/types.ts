@@ -54,6 +54,17 @@ export interface LeaderboardEntry {
   score: number;
   selectedBranch: string;
   createdAt: string;
+  premium: boolean;
+}
+
+export interface LeaderboardPage {
+  entries: LeaderboardEntry[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalEntries: number;
+    totalPages: number;
+  };
 }
 
 export interface SubmitResponse {
@@ -62,6 +73,8 @@ export interface SubmitResponse {
   score: number;
   selectedBranch: string;
   clientSessionId: string;
+  isPersonalBest: boolean;
+  bestScore: number;
   approximatePosition: number;
   createdAt: string;
 }

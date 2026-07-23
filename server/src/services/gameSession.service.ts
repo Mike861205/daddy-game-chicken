@@ -61,6 +61,16 @@ export async function createGameSession(params: CreateGameSessionParams) {
     }
   }
 
+  const currentBest = await prisma.gameSession.findFirst({
+    where: playerId
+      ? { playerId }
+      : { nickname: { equals: params.nickname, mode: 'insensitive' } },
+    orderBy: [{ score: 'desc' }, { createdAt: 'asc' }],
+    select: { score: true },
+  });
+  const isPersonalBest = !currentBest || params.score > currentBest.score;
+  const bestScore = Math.max(currentBest?.score ?? 0, params.score);
+
   const session = await prisma.gameSession.create({
     data: {
       playerId,
@@ -84,7 +94,7 @@ export async function createGameSession(params: CreateGameSessionParams) {
     },
   });
 
-  return session;
+  return { ...session, isPersonalBest, bestScore };
 }
 
 /**

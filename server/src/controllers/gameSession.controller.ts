@@ -18,7 +18,7 @@ export async function submitGameSession(req: Request, res: Response): Promise<vo
   const ipHash = hashIp(req.ip);
 
   const session = await createGameSession({ ...input, ipHash });
-  const position = await getApproximatePosition(session.score);
+  const position = await getApproximatePosition(session.bestScore);
 
   res.status(201).json({
     data: {
@@ -27,6 +27,8 @@ export async function submitGameSession(req: Request, res: Response): Promise<vo
       score: session.score,
       selectedBranch: session.selectedBranch,
       clientSessionId: session.clientSessionId,
+      isPersonalBest: session.isPersonalBest,
+      bestScore: session.bestScore,
       approximatePosition: position,
       createdAt: session.createdAt,
     },
@@ -38,6 +40,9 @@ export async function submitGameSession(req: Request, res: Response): Promise<vo
  */
 export async function getLeaderboardHandler(req: Request, res: Response): Promise<void> {
   const query = leaderboardQuerySchema.parse(req.query);
-  const entries = await getLeaderboard(query);
-  res.status(200).json({ data: entries });
+  const leaderboard = await getLeaderboard(query);
+  res.status(200).json({
+    data: leaderboard.entries,
+    pagination: leaderboard.pagination,
+  });
 }

@@ -136,7 +136,7 @@ export class ResultScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     // Buttons.
-    createButton(this, cx, 720, 'GUARDAR PUNTAJE', () => void this.saveScore(), {
+    createButton(this, cx, 720, 'REINTENTAR GUARDADO', () => void this.saveScore(), {
       fillColor: COLORS.green,
       textColor: '#ffffff',
       width: 420,
@@ -161,6 +161,12 @@ export class ResultScene extends Phaser.Scene {
       height: 60,
       fontSize: 26,
     });
+
+    // The avatar is known before the match starts, so saving no longer
+    // depends on the player pressing a button at the end.
+    this.statusText.setColor(COLORS_HEX.white);
+    this.statusText.setText('Guardando tu puntaje automáticamente…');
+    this.time.delayedCall(150, () => void this.saveScore());
   }
 
   private createNicknameInput(x: number, y: number): void {
@@ -207,7 +213,7 @@ export class ResultScene extends Phaser.Scene {
     const phone = (this.registry.get(REGISTRY.playerPhone) as string | undefined) ?? undefined;
     const name = (this.registry.get(REGISTRY.playerName) as string | undefined) ?? undefined;
     this.statusText.setColor(COLORS_HEX.white);
-    this.statusText.setText('Guardando…');
+    this.statusText.setText('Guardando automáticamente…');
 
     try {
       const response = await api.submitGameSession(this.result, nickname, phone, name);
@@ -216,7 +222,11 @@ export class ResultScene extends Phaser.Scene {
       }
       this.saved = true;
       this.statusText.setColor(COLORS_HEX.neon);
-      this.statusText.setText(`¡Guardado! Posición aprox: #${response.approximatePosition}`);
+      this.statusText.setText(
+        response.isPersonalBest
+          ? `¡Nuevo récord guardado! Posición aprox: #${response.approximatePosition}`
+          : `Partida registrada. Tu récord sigue en ${response.bestScore.toLocaleString('es-MX')}.`,
+      );
 
       // Request a reward if the score qualifies.
       this.reward = await api.requestReward(this.result.clientSessionId);

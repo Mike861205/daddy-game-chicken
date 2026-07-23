@@ -213,6 +213,7 @@ export function showReturningPlayerForm(
   branches: Branch[],
   lookup: (phone: string) => Promise<ReturningLookupResult | null>,
   defaults: RegistrationDefaults = {},
+  detectedPlayer: ReturningLookupResult | null = null,
 ): Promise<ReturningPlayerResult> {
   return new Promise((resolve) => {
     removeRegistrationOverlays();
@@ -232,7 +233,11 @@ export function showReturningPlayerForm(
       <div class="dgc-card" role="dialog" aria-modal="true">
         <div class="dgc-card__header">
           <div class="dgc-card__title">¡QUÉ BUENO VERTE!</div>
-          <div class="dgc-card__subtitle">Ingresa tu teléfono para volver a jugar</div>
+          <div class="dgc-card__subtitle">${
+            detectedPlayer
+              ? `Te reconocimos como ${escapeHtml(detectedPlayer.avatar)}`
+              : 'Ingresa tu teléfono para volver a jugar'
+          }</div>
         </div>
         <form class="dgc-card__body" novalidate autocomplete="off">
           <div class="dgc-field">
@@ -243,7 +248,11 @@ export function showReturningPlayerForm(
               )}" />
           </div>
 
-          <div class="dgc-found" id="dgc-found" hidden></div>
+          <div class="dgc-found" id="dgc-found" ${detectedPlayer ? '' : 'hidden'}>${
+            detectedPlayer
+              ? `¡Hola de nuevo, <strong>${escapeHtml(detectedPlayer.avatar)}</strong>! Ya detectamos tu registro en este dispositivo.`
+              : ''
+          }</div>
 
           <div class="dgc-field">
             <label class="dgc-label">Elige tu sucursal</label>
@@ -286,8 +295,8 @@ export function showReturningPlayerForm(
     }
     applyBranchSelection();
 
-    let found: ReturningLookupResult | null = null;
-    let lookedUpPhone = '';
+    let found: ReturningLookupResult | null = detectedPlayer;
+    let lookedUpPhone = detectedPlayer ? (defaults.phone ?? '').trim() : '';
 
     const cleanup = () => overlay.remove();
     const showError = (message: string) => {
@@ -365,6 +374,8 @@ export function showReturningPlayerForm(
       });
     });
 
-    window.setTimeout(() => phoneInput.focus(), 60);
+    if (!detectedPlayer) {
+      window.setTimeout(() => phoneInput.focus(), 60);
+    }
   });
 }

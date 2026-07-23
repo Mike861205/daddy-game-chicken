@@ -20,6 +20,7 @@ interface AdminConfig {
 }
 
 type DeploymentState = 'idle' | 'running' | 'succeeded' | 'failed';
+type AdminModule = 'overview' | 'reports' | 'game' | 'rewards' | 'deployment';
 
 interface DeploymentStatus {
   enabled: boolean;
@@ -29,6 +30,54 @@ interface DeploymentStatus {
   finishedAt: string | null;
   commit: string | null;
   logs: string[];
+}
+
+type ReportSortBy =
+  | 'createdAt'
+  | 'nickname'
+  | 'name'
+  | 'phone'
+  | 'gameCount'
+  | 'totalDurationSeconds'
+  | 'bestScore'
+  | 'rewardCount'
+  | 'lastPlayedAt';
+
+interface PlayerReportRow {
+  id: string;
+  createdAt: string;
+  name: string | null;
+  nickname: string;
+  phone: string | null;
+  gameCount: number;
+  totalDurationSeconds: number;
+  bestScore: number;
+  rewardCount: number;
+  rewardLabels: string | null;
+  lastPlayedAt: string | null;
+}
+
+interface PlayerReport {
+  summary: {
+    totalPlayers: number;
+    totalSessions: number;
+    totalDurationSeconds: number;
+    totalRewards: number;
+    returningPlayers: number;
+    rewardedPlayers: number;
+    rewardRate: number;
+  };
+  players: PlayerReportRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalPlayers: number;
+    totalPages: number;
+  };
+  appliedRange: {
+    from: string | null;
+    to: string | null;
+  };
 }
 
 const loginView = required<HTMLElement>('login-view');
@@ -53,10 +102,40 @@ const deploymentLogs = required<HTMLElement>('deployment-logs');
 const deploymentModal = required<HTMLElement>('deployment-confirm-modal');
 const deploymentConfirmButton = required<HTMLButtonElement>('deployment-confirm');
 const deploymentConfirmMessage = required<HTMLElement>('deployment-confirm-message');
+const reportPeriod = required<HTMLSelectElement>('report-period');
+const reportDay = required<HTMLInputElement>('report-day');
+const reportMonth = required<HTMLInputElement>('report-month');
+const reportYear = required<HTMLInputElement>('report-year');
+const reportFrom = required<HTMLInputElement>('report-from');
+const reportTo = required<HTMLInputElement>('report-to');
+const reportSearch = required<HTMLInputElement>('report-search');
+const reportPlayersBody = required<HTMLTableSectionElement>('report-players-body');
+const reportStatus = required<HTMLElement>('report-status');
+const reportPage = required<HTMLElement>('report-page');
+const reportPrevious = required<HTMLButtonElement>('report-previous');
+const reportNext = required<HTMLButtonElement>('report-next');
+const adminSidebar = required<HTMLElement>('admin-sidebar');
+const sidebarToggle = required<HTMLButtonElement>('sidebar-toggle');
+const sidebarBackdrop = required<HTMLButtonElement>('sidebar-backdrop');
+const currentModuleLabel = required<HTMLElement>('current-module-label');
+const saveBar = required<HTMLElement>('save-bar');
 
 let currentConfig: AdminConfig | null = null;
 let deploymentTimer: number | null = null;
 let pendingDeploymentMessage = '';
+let reportCurrentPage = 1;
+let reportTotalPages = 1;
+let reportSortBy: ReportSortBy = 'lastPlayedAt';
+let reportSortOrder: 'asc' | 'desc' = 'desc';
+let reportRequestSequence = 0;
+
+const moduleLabels: Record<AdminModule, string> = {
+  overview: 'Inicio',
+  reports: 'Informes',
+  game: 'Configuración',
+  rewards: 'Premios',
+  deployment: 'Despliegue',
+};
 
 function required<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
@@ -79,9 +158,51 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   return body.data;
 }
 
+function moduleFromHash(): AdminModule {
+  const value = window.location.hash.replace(/^#/u, '');
+  if (value === 'player-reports') return 'reports';
+  return value in moduleLabels ? (value as AdminModule) : 'overview';
+}
+
+function closeSidebar(): void {
+  adminSidebar.classList.remove('is-open');
+  sidebarBackdrop.hidden = true;
+  sidebarToggle.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('sidebar-open');
+}
+
+function openSidebar(): void {
+  adminSidebar.classList.add('is-open');
+  sidebarBackdrop.hidden = false;
+  sidebarToggle.setAttribute('aria-expanded', 'true');
+  document.body.classList.add('sidebar-open');
+}
+
+function activateModule(module: AdminModule, updateHash = true): void {
+  document.querySelectorAll<HTMLElement>('[data-module-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.modulePanel !== module;
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-module]').forEach((button) => {
+    const selected = button.dataset.module === module;
+    button.classList.toggle('is-active', selected);
+    button.setAttribute('aria-current', selected ? 'page' : 'false');
+  });
+  currentModuleLabel.textContent = moduleLabels[module];
+  saveBar.hidden = module !== 'game' && module !== 'rewards';
+  closeSidebar();
+  if (updateHash) {
+    window.history.replaceState(null, '', `#${module}`);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  if (module === 'reports' && reportPlayersBody.children.length === 0) {
+    void loadPlayerReports();
+  }
+}
+
 function showLogin(): void {
   loginView.hidden = false;
   adminView.hidden = true;
+  closeSidebar();
   required<HTMLInputElement>('username').focus();
 }
 
@@ -95,7 +216,8 @@ async function showAdmin(): Promise<void> {
   updateBossArrivalPreview(currentConfig.bossArrivalSeconds);
   setDifficulty(currentConfig.difficultyLevel);
   renderTiers();
-  await loadDeploymentModule();
+  await Promise.all([loadDeploymentModule(), loadPlayerReports()]);
+  activateModule(moduleFromHash(), false);
 }
 
 function difficultyLabel(level: number): string {
@@ -142,6 +264,7 @@ function stopDeploymentPolling(): void {
 
 function renderDeployment(status: DeploymentStatus): void {
   deploymentPanel.hidden = !status.enabled;
+  required<HTMLElement>('deployment-unavailable').hidden = status.enabled;
   if (!status.enabled) {
     stopDeploymentPolling();
     return;
@@ -180,6 +303,7 @@ async function loadDeploymentModule(): Promise<void> {
     renderDeployment(await api<DeploymentStatus>('/deployment'));
   } catch {
     deploymentPanel.hidden = true;
+    required<HTMLElement>('deployment-unavailable').hidden = false;
   }
 }
 
@@ -190,6 +314,197 @@ function escapeHtml(value: string): string {
     };
     return entities[character] ?? character;
   });
+}
+
+function toDateInputValue(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function parseLocalDate(value: string): Date {
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function addLocalDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function initializeReportDates(): void {
+  const now = new Date();
+  const today = toDateInputValue(now);
+  reportDay.value = today;
+  reportMonth.value = today.slice(0, 7);
+  reportYear.value = String(now.getFullYear());
+  reportFrom.value = today;
+  reportTo.value = today;
+}
+
+function updateReportPeriodControls(): void {
+  document.querySelectorAll<HTMLElement>('.report-period-control').forEach((control) => {
+    control.hidden = control.dataset.period !== reportPeriod.value;
+  });
+}
+
+function resolveReportRange(): { from?: string; to?: string } {
+  let start: Date | null = null;
+  let end: Date | null = null;
+  if (reportPeriod.value === 'day') {
+    if (!reportDay.value) throw new Error('Selecciona el día del informe.');
+    start = parseLocalDate(reportDay.value);
+    end = addLocalDays(start, 1);
+  } else if (reportPeriod.value === 'month') {
+    if (!reportMonth.value) throw new Error('Selecciona el mes del informe.');
+    const [year, month] = reportMonth.value.split('-').map(Number);
+    start = new Date(year, month - 1, 1);
+    end = new Date(year, month, 1);
+  } else if (reportPeriod.value === 'year') {
+    const year = Number(reportYear.value);
+    if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+      throw new Error('Escribe un año válido entre 2020 y 2100.');
+    }
+    start = new Date(year, 0, 1);
+    end = new Date(year + 1, 0, 1);
+  } else if (reportPeriod.value === 'custom') {
+    if (!reportFrom.value || !reportTo.value) {
+      throw new Error('Completa las dos fechas del rango personalizado.');
+    }
+    start = parseLocalDate(reportFrom.value);
+    end = addLocalDays(parseLocalDate(reportTo.value), 1);
+    if (start >= end) throw new Error('La fecha inicial debe ser anterior a la final.');
+  }
+  return start && end ? { from: start.toISOString(), to: end.toISOString() } : {};
+}
+
+function formatReportDate(value: string | null): string {
+  if (!value) return 'Sin partidas';
+  return new Intl.DateTimeFormat('es-MX', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function formatDuration(seconds: number): string {
+  const safeSeconds = Math.max(0, Math.round(seconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+  if (hours === 0) return `${minutes} min`;
+  return `${hours} h ${minutes} min`;
+}
+
+function formatMetricHours(seconds: number): string {
+  const hours = Math.max(0, seconds) / 3600;
+  return hours.toLocaleString('es-MX', {
+    minimumFractionDigits: hours > 0 && hours < 10 ? 1 : 0,
+    maximumFractionDigits: 1,
+  });
+}
+
+function avatarColor(value: string): string {
+  let hash = 0;
+  for (const character of value) {
+    hash = character.charCodeAt(0) + ((hash << 5) - hash);
+    hash |= 0;
+  }
+  return `hsl(${Math.abs(hash) % 360} 72% 46%)`;
+}
+
+function renderReportSortState(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-sort]').forEach((button) => {
+    const active = button.dataset.sort === reportSortBy;
+    button.classList.toggle('is-active', active);
+    const indicator = button.querySelector('i');
+    if (indicator) indicator.textContent = active ? (reportSortOrder === 'asc' ? '↑' : '↓') : '↕';
+    button.closest('th')?.setAttribute(
+      'aria-sort',
+      active ? (reportSortOrder === 'asc' ? 'ascending' : 'descending') : 'none',
+    );
+  });
+}
+
+function renderPlayerReport(report: PlayerReport): void {
+  const { summary, pagination } = report;
+  required<HTMLElement>('metric-players').textContent = summary.totalPlayers.toLocaleString('es-MX');
+  required<HTMLElement>('metric-games').textContent = summary.totalSessions.toLocaleString('es-MX');
+  required<HTMLElement>('metric-hours').textContent = formatMetricHours(summary.totalDurationSeconds);
+  required<HTMLElement>('metric-rewards').textContent = summary.totalRewards.toLocaleString('es-MX');
+  required<HTMLElement>('metric-returning').textContent = summary.returningPlayers.toLocaleString('es-MX');
+  required<HTMLElement>('metric-reward-rate').textContent = `${summary.rewardRate.toLocaleString('es-MX')}%`;
+
+  reportPlayersBody.innerHTML = report.players
+    .map((player) => {
+      const initial = (player.nickname.trim()[0] ?? '?').toUpperCase();
+      const rewards =
+        player.rewardCount > 0
+          ? `<span class="reward-badge" title="${escapeHtml(player.rewardLabels ?? 'Premio generado')}">Sí · ${player.rewardCount}</span>`
+          : '<span class="no-reward">No</span>';
+      return `
+        <tr>
+          <td data-label="Fecha registro">${formatReportDate(player.createdAt)}</td>
+          <td data-label="Avatar"><span class="player-avatar" style="--avatar-color:${avatarColor(player.nickname)}">${escapeHtml(initial)}</span><strong class="avatar-name">${escapeHtml(player.nickname)}</strong></td>
+          <td data-label="Nombre">${escapeHtml(player.name || '—')}</td>
+          <td data-label="Teléfono">${player.phone ? `<a href="tel:${escapeHtml(player.phone)}">${escapeHtml(player.phone)}</a>` : '—'}</td>
+          <td data-label="Partidas"><b>${player.gameCount.toLocaleString('es-MX')}</b></td>
+          <td data-label="Horas">${formatDuration(player.totalDurationSeconds)}</td>
+          <td data-label="Récord"><b class="best-score">${player.bestScore.toLocaleString('es-MX')}</b></td>
+          <td data-label="Premios">${rewards}</td>
+          <td data-label="Última partida">${formatReportDate(player.lastPlayedAt)}</td>
+        </tr>`;
+    })
+    .join('');
+
+  if (report.players.length === 0) {
+    reportPlayersBody.innerHTML =
+      '<tr><td class="report-empty" colspan="9">No hay jugadores para los filtros seleccionados.</td></tr>';
+  }
+
+  reportCurrentPage = pagination.page;
+  reportTotalPages = pagination.totalPages;
+  reportPage.textContent = `Página ${pagination.page} de ${pagination.totalPages} · ${pagination.totalPlayers.toLocaleString('es-MX')} jugadores`;
+  reportPrevious.disabled = pagination.page <= 1;
+  reportNext.disabled = pagination.page >= pagination.totalPages;
+  reportStatus.textContent =
+    report.players.length > 0
+      ? `Mostrando ${report.players.length} jugadores en esta página.`
+      : 'Sin resultados para este periodo.';
+  renderReportSortState();
+}
+
+async function loadPlayerReports(): Promise<void> {
+  const requestId = ++reportRequestSequence;
+  reportStatus.className = 'report-status is-loading';
+  reportStatus.textContent = 'Consultando actividad de jugadores…';
+  reportPrevious.disabled = true;
+  reportNext.disabled = true;
+
+  try {
+    const range = resolveReportRange();
+    const params = new URLSearchParams({
+      page: String(reportCurrentPage),
+      sortBy: reportSortBy,
+      sortOrder: reportSortOrder,
+    });
+    if (reportSearch.value.trim()) params.set('search', reportSearch.value.trim());
+    if (range.from && range.to) {
+      params.set('from', range.from);
+      params.set('to', range.to);
+    }
+    const report = await api<PlayerReport>(`/reports/players?${params.toString()}`);
+    if (requestId !== reportRequestSequence) return;
+    reportStatus.className = 'report-status';
+    renderPlayerReport(report);
+  } catch (error) {
+    if (requestId !== reportRequestSequence) return;
+    reportStatus.className = 'report-status report-status--error';
+    reportStatus.textContent =
+      error instanceof Error ? error.message : 'No se pudo cargar el informe.';
+    reportPlayersBody.innerHTML =
+      '<tr><td class="report-empty" colspan="9">No fue posible cargar los jugadores.</td></tr>';
+  }
 }
 
 function renderTiers(): void {
@@ -387,13 +702,79 @@ deploymentConfirmButton.addEventListener('click', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && !deploymentModal.hidden) {
     closeDeploymentModal();
+  } else if (event.key === 'Escape' && adminSidebar.classList.contains('is-open')) {
+    closeSidebar();
   }
 });
+
+document.querySelectorAll<HTMLButtonElement>('[data-module]').forEach((button) => {
+  button.addEventListener('click', () => {
+    activateModule(button.dataset.module as AdminModule);
+  });
+});
+document.querySelectorAll<HTMLButtonElement>('[data-open-module]').forEach((button) => {
+  button.addEventListener('click', () => {
+    activateModule(button.dataset.openModule as AdminModule);
+  });
+});
+sidebarToggle.addEventListener('click', () => {
+  if (adminSidebar.classList.contains('is-open')) closeSidebar();
+  else openSidebar();
+});
+sidebarBackdrop.addEventListener('click', closeSidebar);
+window.addEventListener('hashchange', () => activateModule(moduleFromHash(), false));
+
+reportPeriod.addEventListener('change', updateReportPeriodControls);
+required<HTMLButtonElement>('report-apply').addEventListener('click', () => {
+  reportCurrentPage = 1;
+  void loadPlayerReports();
+});
+required<HTMLButtonElement>('report-refresh').addEventListener('click', () => {
+  void loadPlayerReports();
+});
+reportSearch.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    reportCurrentPage = 1;
+    void loadPlayerReports();
+  }
+});
+document.querySelectorAll<HTMLButtonElement>('[data-sort]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const sort = button.dataset.sort as ReportSortBy;
+    if (sort === reportSortBy) {
+      reportSortOrder = reportSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      reportSortBy = sort;
+      reportSortOrder =
+        sort === 'nickname' || sort === 'name' || sort === 'phone' ? 'asc' : 'desc';
+    }
+    reportCurrentPage = 1;
+    void loadPlayerReports();
+  });
+});
+reportPrevious.addEventListener('click', () => {
+  if (reportCurrentPage > 1) {
+    reportCurrentPage -= 1;
+    void loadPlayerReports();
+  }
+});
+reportNext.addEventListener('click', () => {
+  if (reportCurrentPage < reportTotalPages) {
+    reportCurrentPage += 1;
+    void loadPlayerReports();
+  }
+});
+
 required<HTMLButtonElement>('logout-button').addEventListener('click', async () => {
   stopDeploymentPolling();
   await api<{ authenticated: boolean }>('/logout', { method: 'POST', body: '{}' });
   showLogin();
 });
+
+initializeReportDates();
+updateReportPeriodControls();
+renderReportSortState();
 
 void (async () => {
   try {

@@ -56,7 +56,8 @@ export type ValidateRewardInput = z.infer<typeof validateRewardSchema>;
  */
 export const leaderboardQuerySchema = z.object({
   branch: z.enum(BRANCH_IDS).optional(),
-  limit: z.coerce.number().int().min(1).max(50).default(10),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(50),
 });
 
 export type LeaderboardQuery = z.infer<typeof leaderboardQuerySchema>;

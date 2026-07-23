@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prismaMock = {
   gameSession: {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     create: vi.fn(),
     count: vi.fn(),
     findMany: vi.fn(),
@@ -26,6 +27,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   // Default: no configuration rows -> services fall back to defaults.
   prismaMock.gameConfiguration.findUnique.mockResolvedValue(null);
+  prismaMock.gameSession.findFirst.mockResolvedValue(null);
 });
 
 describe('createGameSession - duplicate prevention', () => {
@@ -63,7 +65,26 @@ describe('createGameSession - duplicate prevention', () => {
 
     const result = await createGameSession(baseInput);
     expect(result.id).toBe('new-id');
+    expect(result.isPersonalBest).toBe(true);
+    expect(result.bestScore).toBe(baseInput.score);
     expect(prismaMock.gameSession.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the previous personal best when a lower score is submitted', async () => {
+    prismaMock.gameSession.findUnique.mockResolvedValue(null);
+    prismaMock.gameSession.findFirst.mockResolvedValue({ score: 10_000 });
+    prismaMock.gameSession.create.mockResolvedValue({
+      id: 'lower-session',
+      nickname: baseInput.nickname,
+      score: baseInput.score,
+      selectedBranch: baseInput.selectedBranch,
+      createdAt: new Date(),
+      clientSessionId: baseInput.clientSessionId,
+    });
+
+    const result = await createGameSession(baseInput);
+    expect(result.isPersonalBest).toBe(false);
+    expect(result.bestScore).toBe(10_000);
   });
 
   it('rejects an impossible score', async () => {
@@ -76,17 +97,36 @@ describe('createGameSession - duplicate prevention', () => {
 });
 
 describe('getLeaderboard', () => {
-  it('returns ranked entries without phone numbers', async () => {
+  it('returns a page of personal bests without phone numbers', async () => {
     const now = new Date();
-    prismaMock.gameSession.findMany.mockResolvedValue([
-      { nickname: 'Ana', score: 5000, selectedBranch: 'auroras', createdAt: now },
-      { nickname: 'Beto', score: 3000, selectedBranch: 'auroras', createdAt: now },
+    prismaMock.$queryRaw.mockResolvedValue([
+      {
+        nickname: 'Ana',
+        score: 5000,
+        selectedBranch: 'san-jose',
+        createdAt: now,
+        totalEntries: 2,
+      },
+      {
+        nickname: 'Beto',
+        score: 3000,
+        selectedBranch: 'san-jose',
+        createdAt: now,
+        totalEntries: 2,
+      },
     ]);
 
-    const entries = await getLeaderboard({ limit: 10 });
-    expect(entries).toHaveLength(2);
-    expect(entries[0].rank).toBe(1);
-    expect(entries[1].rank).toBe(2);
-    expect(entries[0]).not.toHaveProperty('phone');
+    const result = await getLeaderboard({ page: 1, limit: 50 });
+    expect(result.entries).toHaveLength(2);
+    expect(result.entries[0].rank).toBe(1);
+    expect(result.entries[0].premium).toBe(true);
+    expect(result.entries[1].rank).toBe(2);
+    expect(result.entries[0]).not.toHaveProperty('phone');
+    expect(result.pagination).toEqual({
+      page: 1,
+      pageSize: 50,
+      totalEntries: 2,
+      totalPages: 1,
+    });
   });
 });

@@ -1,11 +1,12 @@
 /**
- * Small localStorage wrapper for personal best score and preferences.
+ * Small localStorage wrapper for player recognition, personal best and preferences.
  */
 const KEYS = {
   bestScore: 'dgc.bestScore',
   soundEnabled: 'dgc.soundEnabled',
   nickname: 'dgc.nickname',
   branch: 'dgc.branch',
+  playerPhone: 'dgc.playerPhone',
 };
 
 function safeGet(key: string): string | null {
@@ -52,5 +53,11 @@ export const storage = {
   },
   setBranch(branch: string): void {
     safeSet(KEYS.branch, branch);
+  },
+  getPlayerPhone(): string {
+    return safeGet(KEYS.playerPhone) ?? '';
+  },
+  setPlayerPhone(phone: string): void {
+    safeSet(KEYS.playerPhone, phone);
   },
 };
