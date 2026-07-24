@@ -6,12 +6,13 @@ import { api } from '../services/api.js';
 import { WORLDS } from '../config/worlds.js';
 
 /**
- * Loads game assets behind a six-second branded cinematic intro.
+ * Loads game assets behind a branded cinematic that previews all eight worlds.
  */
 export class PreloadScene extends Phaser.Scene {
-  private static readonly INTRO_DURATION_MS = 6000;
+  private static readonly INTRO_DURATION_MS = 8800;
   private introStartedAt = 0;
   private progressAnimationFrame = 0;
+  private introWorldIndex = -1;
 
   constructor() {
     super(SCENES.Preload);
@@ -26,7 +27,7 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     const imageBase = 'assets/images';
-    const assetVersion = 'neon-intro-20260722';
+    const assetVersion = 'combat-bike-20260723';
     this.load.spritesheet(
       'daddy-pollo-anim',
       `${imageBase}/daddy-pollo-anim.png?v=${assetVersion}`,
@@ -51,6 +52,12 @@ export class PreloadScene extends Phaser.Scene {
         world.bossTexture,
         `${imageBase}/${world.bossTexture}.png?v=${assetVersion}`,
       );
+      if (world.secondaryBossTexture) {
+        this.load.image(
+          world.secondaryBossTexture,
+          `${imageBase}/${world.secondaryBossTexture}.png?v=${assetVersion}`,
+        );
+      }
     }
     for (const item of ALL_ITEMS) {
       this.load.image(item.key, `${imageBase}/${item.key}.png?v=${assetVersion}`);
@@ -94,6 +101,10 @@ export class PreloadScene extends Phaser.Scene {
 
   private updateHtmlProgress(progress: number): void {
     const percentage = Math.round(progress * 100);
+    const activeWorldIndex = Math.min(
+      WORLDS.length - 1,
+      Math.floor(progress * WORLDS.length),
+    );
     const bar = document.querySelector<HTMLElement>('.loading-bar');
     const fill = document.querySelector<HTMLElement>('.loading-bar > span');
     const percent = document.querySelector<HTMLElement>('.loading-percent');
@@ -109,25 +120,19 @@ export class PreloadScene extends Phaser.Scene {
       percent.textContent = `${percentage}%`;
     }
     if (label) {
-      label.textContent = progress < 0.16
+      label.textContent = progress < 0.1
         ? 'ENCENDIENDO EL NEÓN'
-        : progress < 0.32
-          ? 'ESCANEANDO BAHÍA NEÓN'
-          : progress < 0.48
-            ? 'RASTREANDO PUERTO CORSARIO'
-            : progress < 0.64
-              ? 'ABRIENDO TEMPLO POSEIDÓN'
-              : progress < 0.8
-                ? 'AISLANDO PANTANO TÓXICO'
-                : progress < 0.98
-                  ? 'LOCALIZANDO FORTALEZA OMEGA'
-                  : '¡MISIÓN LISTA!';
+        : progress < 0.98
+          ? `RASTREANDO ${WORLDS[activeWorldIndex].name.toUpperCase()}`
+          : '¡MISIÓN LISTA!';
     }
 
-    // The runner is driven by the exact same progress value as the bar. CSS
-    // used to start before Phaser's six-second clock, making Daddy arrive early
-    // and appear frozen at the finish line while loading continued.
+    // The runner is driven by the exact same progress value as the bar so Daddy
+    // reaches the finish line with the last encounter instead of arriving early.
     if (stage && runner) {
+      const ridingBike = progress < 0.5;
+      runner.classList.toggle('is-bike-phase', ridingBike);
+      runner.classList.toggle('is-running-phase', !ridingBike);
       const runnerWidth = runner.getBoundingClientRect().width;
       const startX = -runnerWidth * 0.58;
       const endX = stage.clientWidth - runnerWidth * 0.78;
@@ -139,14 +144,30 @@ export class PreloadScene extends Phaser.Scene {
     }
 
     if (bosses.length > 0) {
-      const activeBossIndex = Math.min(bosses.length - 1, Math.floor(progress * bosses.length));
-      bosses.forEach((boss, index) => boss.classList.toggle('is-active', index === activeBossIndex));
-      const bossOnLeft = activeBossIndex % 2 === 1;
+      const activeBosses = bosses.filter(
+        (boss) => Number(boss.dataset.worldIndex) === activeWorldIndex,
+      );
+      bosses.forEach((boss) => {
+        boss.classList.toggle(
+          'is-active',
+          Number(boss.dataset.worldIndex) === activeWorldIndex,
+        );
+      });
+      const bossOnLeft = activeWorldIndex % 2 === 1;
       bossPortal?.classList.toggle('is-left', bossOnLeft);
       bossPortal?.classList.toggle('is-right', !bossOnLeft);
-      const activeBoss = bosses[activeBossIndex];
-      if (bossLabel && activeBoss) {
-        bossLabel.textContent = activeBoss.dataset.bossName ?? 'GRAN JEFE';
+      bossPortal?.classList.toggle('is-dual', activeBosses.length > 1);
+      if (bossPortal && activeBosses[0]) {
+        bossPortal.dataset.power = activeBosses[0].dataset.bossPower ?? 'fire';
+        if (this.introWorldIndex !== activeWorldIndex) {
+          bossPortal.classList.remove('is-swapping');
+          void bossPortal.offsetWidth;
+          bossPortal.classList.add('is-swapping');
+          this.introWorldIndex = activeWorldIndex;
+        }
+      }
+      if (bossLabel) {
+        bossLabel.textContent = WORLDS[activeWorldIndex].bossName.toUpperCase();
       }
     }
   }

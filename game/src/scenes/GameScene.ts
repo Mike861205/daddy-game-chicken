@@ -21,6 +21,7 @@ import { ENEMIES, ENEMY_ORDER, type EnemyType } from '../config/enemies.js';
 import { WEAPONS } from '../config/weapons.js';
 import { WORLDS, type WorldDefinition } from '../config/worlds.js';
 import { Boss } from '../objects/Boss.js';
+import { CombatBike } from '../objects/CombatBike.js';
 import { Enemy } from '../objects/Enemy.js';
 import { FallingItem } from '../objects/FallingItem.js';
 import { Player } from '../objects/Player.js';
@@ -35,6 +36,20 @@ interface TouchControl {
   hitZone: Phaser.GameObjects.Zone;
 }
 
+interface BossProjectileOptions {
+  texture?: string;
+  kind?: string;
+  size?: number;
+  displayWidth?: number;
+  displayHeight?: number;
+  speedMultiplier?: number;
+  curve?: number;
+  useMaliciousIcon?: boolean;
+  originX?: number;
+  originY?: number;
+  angularVelocity?: number;
+}
+
 export class GameScene extends Phaser.Scene {
   private player!: Player;
   private items!: Phaser.Physics.Arcade.Group;
@@ -43,6 +58,8 @@ export class GameScene extends Phaser.Scene {
   private enemyProjectiles!: Phaser.Physics.Arcade.Group;
   private bossProjectiles!: Phaser.Physics.Arcade.Group;
   private boss!: Boss;
+  private secondaryBoss!: Boss;
+  private combatBike!: CombatBike;
   private config!: PublicConfig;
 
   private score = 0;
@@ -59,6 +76,7 @@ export class GameScene extends Phaser.Scene {
   private worldPaceStage = 0;
   private campaignElapsedSeconds = 0;
   private bossProjectileIndex = 0;
+  private bossAttackSequence = 0;
 
   private baseFallSpeed = 220;
   private spawnDelay = 850;
@@ -84,6 +102,7 @@ export class GameScene extends Phaser.Scene {
   private nextEnemyIndex = 0;
   private enemySpawnId = 0;
   private nextBossReinforcementAt = 0;
+  private nextCombatBikeShotAt = 0;
 
   // HUD.
   private scoreText!: Phaser.GameObjects.Text;
@@ -187,6 +206,7 @@ export class GameScene extends Phaser.Scene {
     this.worldPaceStage = 0;
     this.campaignElapsedSeconds = 0;
     this.bossProjectileIndex = 0;
+    this.bossAttackSequence = 0;
     this.activePowers.clear();
     this.activeWeapon = null;
     this.weaponAmmo = 0;
@@ -200,6 +220,7 @@ export class GameScene extends Phaser.Scene {
     this.nextEnemyIndex = 0;
     this.enemySpawnId = 0;
     this.nextBossReinforcementAt = 0;
+    this.nextCombatBikeShotAt = 0;
     this.leftPressed = false;
     this.rightPressed = false;
     this.dragging = false;
@@ -325,6 +346,7 @@ export class GameScene extends Phaser.Scene {
   private createPlayer(): void {
     this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 150);
     this.player.setDepth(5);
+    this.combatBike = new CombatBike(this);
   }
 
   private createProjectileTextures(): void {
@@ -396,6 +418,73 @@ export class GameScene extends Phaser.Scene {
       water.fillCircle(18, 18, 5);
       water.generateTexture('ataque-abisal', 46, 46);
       water.destroy();
+    }
+
+    if (!this.textures.exists('ataque-hielo')) {
+      const ice = this.make.graphics({ x: 0, y: 0 }, false);
+      ice.fillStyle(0x8ff7ff, 0.35);
+      ice.fillCircle(26, 26, 25);
+      ice.fillStyle(0xd9ffff, 1);
+      ice.fillTriangle(26, 2, 42, 38, 26, 31);
+      ice.fillTriangle(26, 2, 10, 38, 26, 31);
+      ice.lineStyle(3, 0x26bfff, 1);
+      ice.strokeTriangle(26, 2, 42, 38, 10, 38);
+      ice.generateTexture('ataque-hielo', 52, 52);
+      ice.destroy();
+    }
+
+    if (!this.textures.exists('ataque-atomico')) {
+      const bomb = this.make.graphics({ x: 0, y: 0 }, false);
+      bomb.fillStyle(0x1c2438, 1);
+      bomb.fillEllipse(28, 35, 32, 46);
+      bomb.fillStyle(0xffb21c, 1);
+      bomb.fillCircle(28, 34, 12);
+      bomb.fillStyle(0x141a29, 1);
+      bomb.fillTriangle(18, 17, 8, 5, 23, 12);
+      bomb.fillTriangle(38, 17, 48, 5, 33, 12);
+      bomb.lineStyle(3, 0xffef73, 1);
+      bomb.strokeCircle(28, 34, 12);
+      bomb.generateTexture('ataque-atomico', 56, 62);
+      bomb.destroy();
+    }
+
+    if (!this.textures.exists('ataque-rayo')) {
+      const ray = this.make.graphics({ x: 0, y: 0 }, false);
+      ray.fillStyle(0x9ffcff, 0.34);
+      ray.fillRoundedRect(6, 0, 22, 76, 11);
+      ray.fillStyle(0xffffff, 1);
+      ray.fillTriangle(17, 0, 8, 43, 19, 39);
+      ray.fillTriangle(19, 36, 12, 76, 28, 28);
+      ray.lineStyle(2, 0x40dfff, 1);
+      ray.strokeRoundedRect(7, 1, 20, 74, 10);
+      ray.generateTexture('ataque-rayo', 34, 76);
+      ray.destroy();
+    }
+
+    if (!this.textures.exists('ataque-alien')) {
+      const alienBolt = this.make.graphics({ x: 0, y: 0 }, false);
+      alienBolt.fillStyle(0xd778ff, 0.25);
+      alienBolt.fillEllipse(16, 30, 30, 60);
+      alienBolt.fillStyle(0xf4dcff, 1);
+      alienBolt.fillEllipse(16, 30, 10, 52);
+      alienBolt.lineStyle(3, 0x9d36ff, 1);
+      alienBolt.strokeEllipse(16, 30, 22, 56);
+      alienBolt.generateTexture('ataque-alien', 32, 60);
+      alienBolt.destroy();
+    }
+
+    if (!this.textures.exists('mini-nave-alien')) {
+      const fighter = this.make.graphics({ x: 0, y: 0 }, false);
+      fighter.fillStyle(0x1b1236, 1);
+      fighter.fillTriangle(32, 60, 4, 18, 60, 18);
+      fighter.fillStyle(0xc865ff, 1);
+      fighter.fillEllipse(32, 28, 26, 22);
+      fighter.fillStyle(0x9dfcff, 1);
+      fighter.fillCircle(32, 28, 7);
+      fighter.lineStyle(3, 0xe7b5ff, 1);
+      fighter.strokeTriangle(32, 60, 4, 18, 60, 18);
+      fighter.generateTexture('mini-nave-alien', 64, 64);
+      fighter.destroy();
     }
   }
 
@@ -482,8 +571,9 @@ export class GameScene extends Phaser.Scene {
 
   private createBossSystem(): void {
     this.boss = new Boss(this, GAME_WIDTH / 2, -180);
+    this.secondaryBoss = new Boss(this, GAME_WIDTH / 2, -180);
     this.bossProjectiles = this.physics.add.group({
-      maxSize: 90,
+      maxSize: 140,
       runChildUpdate: false,
     });
 
@@ -897,6 +987,14 @@ export class GameScene extends Phaser.Scene {
       loop: true,
       callback: () => this.spawnWeaponPickup(),
     });
+
+    // VIP cadence: the first combat bike and every later opportunity arrive
+    // only once per 25-second window, including during boss encounters.
+    this.time.addEvent({
+      delay: 25000,
+      loop: true,
+      callback: () => this.spawnCombatBikePickup(),
+    });
   }
 
   private startWorldTimers(): void {
@@ -974,7 +1072,13 @@ export class GameScene extends Phaser.Scene {
       // Keyboard / touch movement.
       const left = this.leftPressed || this.leftTouchPointers.size > 0 || this.cursors?.left.isDown || this.keyA?.isDown;
       const right = this.rightPressed || this.rightTouchPointers.size > 0 || this.cursors?.right.isDown || this.keyD?.isDown;
-      const wantsCover = Boolean(this.coverPressed || this.coverTouchPointers.size > 0 || this.keyS?.isDown || this.keyShift?.isDown);
+      const wantsCover = Boolean(
+        !this.combatBike.isActive &&
+        (this.coverPressed ||
+          this.coverTouchPointers.size > 0 ||
+          this.keyS?.isDown ||
+          this.keyShift?.isDown),
+      );
       this.updateCover(wantsCover, delta);
       const keyboardJump =
         (this.cursors ? Phaser.Input.Keyboard.JustDown(this.cursors.up) : false) ||
@@ -995,6 +1099,16 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.player.update(delta);
+    if (this.combatBike.update(this.player, delta)) {
+      this.deactivateCombatBike(false);
+    }
+    if (
+      this.combatBike.isActive &&
+      this.time.now >= this.nextCombatBikeShotAt
+    ) {
+      this.nextCombatBikeShotAt = this.time.now + 360;
+      this.fireCombatBikeVolley();
+    }
 
     const wantsToFire = this.firePressed || this.fireTouchPointers.size > 0 || this.keySpace?.isDown || this.keyF?.isDown;
     if (wantsToFire && !this.player.isCovering()) {
@@ -1037,17 +1151,26 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
-    if (this.bossActive && this.boss.active) {
+    if (this.bossActive) {
       try {
-        const bossUpdate = this.boss.updateBoss(
-          this.time.now,
-          this.difficultySpeedMultiplier,
-          delta,
-        );
-        if (bossUpdate.shouldAttack) {
-          this.spawnBossAttack(bossUpdate.phase);
-        }
-        if (this.time.now >= this.nextBossReinforcementAt) {
+        const encounterBosses = this.getEncounterBosses();
+        encounterBosses.forEach((encounterBoss, index) => {
+          if (!encounterBoss.active) {
+            return;
+          }
+          const bossUpdate = encounterBoss.updateBoss(
+            this.time.now,
+            this.difficultySpeedMultiplier,
+            delta,
+          );
+          if (bossUpdate.shouldAttack) {
+            this.spawnBossAttack(bossUpdate.phase, encounterBoss, index);
+          }
+        });
+        if (
+          encounterBosses.some((encounterBoss) => encounterBoss.active) &&
+          this.time.now >= this.nextBossReinforcementAt
+        ) {
           this.spawnEnemy(true);
           this.nextBossReinforcementAt =
             this.time.now + this.getBossReinforcementDelay();
@@ -1070,12 +1193,14 @@ export class GameScene extends Phaser.Scene {
       // Boss hits are resolved manually instead of from an Arcade overlap
       // callback. This keeps damage deterministic and prevents a callback
       // exception from aborting Phaser's physics step on mobile browsers.
-      if (
-        this.bossActive &&
-        this.boss.active &&
-        this.projectileTouchesBoss(projectile)
-      ) {
-        this.onProjectileHitBoss(projectile, this.boss);
+      const hitBoss = this.bossActive
+        ? this.getEncounterBosses().find(
+          (encounterBoss) =>
+            encounterBoss.active && this.projectileTouchesBoss(projectile, encounterBoss),
+        )
+        : undefined;
+      if (hitBoss) {
+        this.onProjectileHitBoss(projectile, hitBoss);
         return true;
       }
       if (
@@ -1111,6 +1236,25 @@ export class GameScene extends Phaser.Scene {
         const curve = Number(projectile.getData('curve') ?? 0);
         if (curve !== 0) {
           body.velocity.x += curve * (delta / 1000);
+        }
+        const projectileKind = String(projectile.getData('projectileKind') ?? 'standard');
+        if (
+          projectileKind === 'alien-fighter' &&
+          this.time.now >= Number(projectile.getData('nextShotAt') ?? Number.POSITIVE_INFINITY)
+        ) {
+          projectile.setData('nextShotAt', Number.POSITIVE_INFINITY);
+          this.spawnAlienFighterShots(projectile);
+        }
+        if (
+          (projectileKind === 'atomic-bomb' && projectile.y > GAME_HEIGHT - 190) ||
+          (projectileKind === 'alien-fighter' && projectile.y > GAME_HEIGHT - 170)
+        ) {
+          this.detonateBossProjectile(
+            projectile,
+            projectileKind === 'atomic-bomb' ? 185 : 125,
+            projectileKind === 'atomic-bomb' ? 0xffb21c : 0xc865ff,
+          );
+          return true;
         }
         if (
           projectile.y > GAME_HEIGHT - 104 ||
@@ -1186,14 +1330,6 @@ export class GameScene extends Phaser.Scene {
       this.physics.resume();
     }
 
-    // Arena cleanup is cosmetic. A malformed pooled object must never prevent
-    // the configured boss encounter from starting.
-    try {
-      this.clearArenaForBoss();
-    } catch (error) {
-      console.error('No se pudo limpiar por completo la arena del jefe.', error);
-    }
-
     this.timeText.setText('JEFE').setColor(this.currentWorld.colorHex);
     this.comboText.setVisible(false);
     this.powerText.setVisible(false);
@@ -1217,10 +1353,38 @@ export class GameScene extends Phaser.Scene {
     this.updateHud();
 
     try {
-      this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel);
-      const bossBody = this.boss.body as Phaser.Physics.Arcade.Body;
-      bossBody.reset(GAME_WIDTH / 2, 325);
-      bossBody.setVelocity(0, 0);
+      const pattern = this.currentWorld.bossPattern ?? 'standard';
+      if (pattern === 'dual-elemental') {
+        this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel, {
+          texture: this.currentWorld.bossTexture,
+          startX: 265,
+          baseY: 330,
+          direction: 1,
+          displayWidth: 270,
+          displayHeight: 350,
+          patrolMinX: 150,
+          patrolMaxX: 455,
+        });
+        this.secondaryBoss.spawn(this.currentWorld, this.time.now, this.difficultyLevel, {
+          texture: this.currentWorld.secondaryBossTexture,
+          startX: GAME_WIDTH - 265,
+          baseY: 330,
+          direction: -1,
+          displayWidth: 270,
+          displayHeight: 350,
+          patrolMinX: GAME_WIDTH - 455,
+          patrolMaxX: GAME_WIDTH - 150,
+        });
+      } else {
+        if (this.secondaryBoss.active) {
+          this.secondaryBoss.recycle();
+        }
+        this.boss.spawn(this.currentWorld, this.time.now, this.difficultyLevel, {
+          displayWidth: pattern === 'atomic-aircraft' ? 450 : pattern === 'alien-carrier' ? 410 : 330,
+          displayHeight: pattern === 'atomic-aircraft' ? 285 : pattern === 'alien-carrier' ? 345 : 430,
+          baseY: pattern === 'atomic-aircraft' ? 270 : 325,
+        });
+      }
     } catch (error) {
       console.error('No se pudo iniciar el jefe; se reintentará.', error);
       this.bossActive = false;
@@ -1266,99 +1430,265 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private clearArenaForBoss(): void {
-    this.items.children.each((child) => {
-      const item = child as FallingItem;
-      if (item.active) item.recycle();
-      return true;
-    });
-    this.enemies.children.each((child) => {
-      const enemy = child as Enemy;
-      if (enemy.active) enemy.recycle();
-      return true;
-    });
-    this.enemyProjectiles.children.each((child) => {
-      const projectile = child as Phaser.Physics.Arcade.Image;
-      if (projectile.active) this.recycleEnemyProjectile(projectile);
-      return true;
-    });
+  private getEncounterBosses(): Boss[] {
+    return this.currentWorld.bossPattern === 'dual-elemental'
+      ? [this.boss, this.secondaryBoss]
+      : [this.boss];
   }
 
-  private spawnBossAttack(phase: number): void {
+  private spawnBossAttack(phase: number, attacker: Boss, bossIndex: number): void {
+    const pattern = this.currentWorld.bossPattern ?? 'standard';
+    if (pattern === 'atomic-aircraft') {
+      this.spawnAircraftAttack(phase, attacker);
+      return;
+    }
+    if (pattern === 'alien-carrier') {
+      this.spawnAlienCarrierAttack(phase, attacker);
+      return;
+    }
+
     const world = this.currentWorld;
-    this.boss.playAttackMotion(this.time.now);
+    attacker.playAttackMotion(this.time.now);
     const difficultyProjectiles = Math.floor(this.difficultyLevel / 4);
-    const count = Math.min(
-      9,
-      1 + world.id + difficultyProjectiles + (phase >= 2 ? 1 : 0),
-    );
+    const count = pattern === 'dual-elemental'
+      ? Math.min(6, 2 + phase + difficultyProjectiles)
+      : Math.min(9, 1 + world.id + difficultyProjectiles + (phase >= 2 ? 1 : 0));
     const baseAngle = Phaser.Math.Angle.Between(
-      this.boss.x,
-      this.boss.y + 35,
+      attacker.x,
+      attacker.y + 35,
       this.player.x,
       this.player.y - 45,
     );
-    const spread = world.id === 1 ? 0.55 : 0.82 + world.id * 0.08;
+    const spread = pattern === 'dual-elemental' ? 0.62 : world.id === 1 ? 0.55 : 0.82 + world.id * 0.08;
+    const elementalTexture = bossIndex === 1
+      ? world.secondaryProjectileTexture ?? 'ataque-hielo'
+      : world.projectileTexture;
     for (let index = 0; index < count; index += 1) {
-      const offset = count === 1 ? 0 : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
+      const offset = count === 1
+        ? 0
+        : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
       try {
-        this.spawnBossProjectile(baseAngle + offset, phase, index);
+        this.spawnBossProjectile(baseAngle + offset, phase, index, attacker, bossIndex, {
+          texture: elementalTexture,
+          useMaliciousIcon: pattern !== 'dual-elemental',
+          curve: pattern === 'dual-elemental'
+            ? (bossIndex === 0 ? 24 : -24)
+            : world.id >= 4
+              ? (index % 2 === 0 ? 34 : -34)
+              : 0,
+        });
       } catch (error) {
         console.error('Se omitió un proyectil inválido del gran jefe.', error);
       }
     }
+    this.finishBossAttackMotion(attacker, bossIndex === 1 ? 0x53e7ff : world.color);
+  }
+
+  private spawnAircraftAttack(phase: number, attacker: Boss): void {
+    attacker.playAttackMotion(this.time.now);
+    const launchBombs = this.bossAttackSequence % 2 === 0;
+    this.bossAttackSequence += 1;
+    const count = launchBombs ? 3 + (phase >= 3 ? 1 : 0) : 4 + phase;
+    const baseAngle = Phaser.Math.Angle.Between(
+      attacker.x,
+      attacker.y + 55,
+      this.player.x,
+      this.player.y - 25,
+    );
+    const spread = launchBombs ? 0.46 : 0.82;
+    for (let index = 0; index < count; index += 1) {
+      const offset = count === 1
+        ? 0
+        : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
+      this.spawnBossProjectile(baseAngle + offset, phase, index, attacker, 0, {
+        texture: launchBombs ? 'ataque-atomico' : 'ataque-rayo',
+        kind: launchBombs ? 'atomic-bomb' : 'energy-ray',
+        displayWidth: launchBombs ? 60 : 34,
+        displayHeight: launchBombs ? 68 : 92,
+        speedMultiplier: launchBombs ? 0.67 : 1.34,
+        useMaliciousIcon: false,
+        angularVelocity: launchBombs ? (index % 2 === 0 ? 125 : -125) : 0,
+      });
+    }
+    this.finishBossAttackMotion(attacker, launchBombs ? 0xffb21c : 0x8ffcff);
+    this.showFloatingText(
+      attacker.x,
+      attacker.y + 100,
+      launchBombs ? '☢ BOMBAS ATÓMICAS' : '⚡ RAYOS DE ENERGÍA',
+      launchBombs ? '#ffd45c' : '#9ffcff',
+    );
+    audioManager.play('blast');
+  }
+
+  private spawnAlienCarrierAttack(phase: number, attacker: Boss): void {
+    attacker.playAttackMotion(this.time.now);
+    const baseAngle = Phaser.Math.Angle.Between(
+      attacker.x,
+      attacker.y + 50,
+      this.player.x,
+      this.player.y - 35,
+    );
+    const boltCount = 3 + phase;
+    for (let index = 0; index < boltCount; index += 1) {
+      const offset = Phaser.Math.Linear(-0.48, 0.48, index / Math.max(1, boltCount - 1));
+      this.spawnBossProjectile(baseAngle + offset, phase, index, attacker, 0, {
+        texture: 'ataque-alien',
+        kind: 'alien-shot',
+        displayWidth: 32,
+        displayHeight: 60,
+        speedMultiplier: 1.1,
+        useMaliciousIcon: false,
+        angularVelocity: 0,
+      });
+    }
+    const fighterCount = phase >= 3 ? 3 : 2;
+    for (let index = 0; index < fighterCount; index += 1) {
+      const fighter = this.spawnBossProjectile(
+        baseAngle + Phaser.Math.Linear(-0.38, 0.38, index / Math.max(1, fighterCount - 1)),
+        phase,
+        index,
+        attacker,
+        0,
+        {
+          texture: 'mini-nave-alien',
+          kind: 'alien-fighter',
+          displayWidth: 68,
+          displayHeight: 68,
+          speedMultiplier: 0.56,
+          useMaliciousIcon: false,
+          angularVelocity: 0,
+        },
+      );
+      fighter?.setData('nextShotAt', this.time.now + 520 + index * 130);
+    }
+    this.finishBossAttackMotion(attacker, 0xc865ff);
+    this.showFloatingText(attacker.x, attacker.y + 105, '🛸 CAZAS DE ATAQUE', '#e4a4ff');
+    audioManager.play('enemy');
+  }
+
+  private spawnBossProjectile(
+    angle: number,
+    phase: number,
+    patternIndex: number,
+    attacker: Boss,
+    bossIndex: number,
+    options: BossProjectileOptions = {},
+  ): Phaser.Physics.Arcade.Image | null {
+    const world = this.currentWorld;
+    const shouldUseMaliciousIcon = options.useMaliciousIcon ?? true;
+    const useMaliciousIcon =
+      shouldUseMaliciousIcon && (this.bossProjectileIndex + patternIndex) % 3 !== 2;
+    const texture = useMaliciousIcon
+      ? BAD_ITEMS[(this.bossProjectileIndex + patternIndex) % BAD_ITEMS.length].key
+      : options.texture ?? world.projectileTexture;
+    this.bossProjectileIndex += 1;
+    const originX = options.originX ?? attacker.x;
+    const originY = options.originY ?? attacker.y + 60;
+    const projectile = this.bossProjectiles.get(originX, originY, texture) as
+      | Phaser.Physics.Arcade.Image
+      | null;
+    if (!projectile) {
+      return null;
+    }
+
+    const size = options.size ?? (useMaliciousIcon ? 48 + world.id * 2 : 42 + world.id * 2);
+    const displayWidth = options.displayWidth ?? size;
+    const displayHeight = options.displayHeight ?? size;
+    const bossName = bossIndex === 1
+      ? world.secondaryBossName ?? world.bossName
+      : world.bossName;
+    projectile
+      .setTexture(texture)
+      .setActive(true)
+      .setVisible(true)
+      .setPosition(originX, originY)
+      .setDisplaySize(displayWidth, displayHeight)
+      .setDepth(18)
+      .setAlpha(1)
+      .setAngle(0)
+      .setTint(useMaliciousIcon ? 0xff647c : 0xffffff)
+      .setData('bossProjectile', true)
+      .setData('bossName', bossName)
+      .setData('enemyType', null)
+      .setData('projectileKind', options.kind ?? 'standard')
+      .setData('nextShotAt', Number.POSITIVE_INFINITY)
+      .setData('curve', options.curve ?? 0);
+    const body = projectile.body as Phaser.Physics.Arcade.Body;
+    body.enable = true;
+    body.reset(projectile.x, projectile.y);
+    body.setAllowGravity(false);
+    body.setCircle(projectile.width * 0.37);
+    const speed =
+      world.projectileSpeed *
+      this.difficultySpeedMultiplier *
+      (1 + (phase - 1) * 0.1) *
+      (options.speedMultiplier ?? 1);
+    body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+    projectile.setAngularVelocity(
+      options.angularVelocity ??
+      (patternIndex % 2 === 0 ? 1 : -1) * (150 + world.id * 35),
+    );
+    return projectile;
+  }
+
+  private finishBossAttackMotion(attacker: Boss, color: number): void {
     try {
-      this.emitMuzzleFlash(this.boss.x, this.boss.y + 60, world.color);
+      this.emitMuzzleFlash(attacker.x, attacker.y + 60, color);
       this.tweens.add({
-        targets: this.boss,
-        scaleX: this.boss.scaleX * 1.08,
-        scaleY: this.boss.scaleY * 0.94,
+        targets: attacker,
+        scaleX: attacker.scaleX * 1.08,
+        scaleY: attacker.scaleY * 0.94,
         duration: 90,
         yoyo: true,
       });
     } catch (error) {
       console.error('Se omitió un efecto visual del gran jefe.', error);
     }
-    audioManager.play(world.id === 2 ? 'blast' : 'enemy');
+    audioManager.play(this.currentWorld.id === 2 ? 'blast' : 'enemy');
   }
 
-  private spawnBossProjectile(angle: number, phase: number, patternIndex: number): void {
-    const world = this.currentWorld;
-    const useMaliciousIcon = (this.bossProjectileIndex + patternIndex) % 3 !== 2;
-    const texture = useMaliciousIcon
-      ? BAD_ITEMS[(this.bossProjectileIndex + patternIndex) % BAD_ITEMS.length].key
-      : world.projectileTexture;
-    this.bossProjectileIndex += 1;
-    const projectile = this.bossProjectiles.get(
-      this.boss.x,
-      this.boss.y + 60,
-      texture,
-    ) as Phaser.Physics.Arcade.Image | null;
-    if (!projectile) {
-      return;
+  private spawnAlienFighterShots(fighter: Phaser.Physics.Arcade.Image): void {
+    for (const [index, offset] of [-0.16, 0.16].entries()) {
+      this.spawnBossProjectile(
+        Math.PI / 2 + offset,
+        1,
+        index,
+        this.boss,
+        0,
+        {
+          texture: 'ataque-alien',
+          kind: 'alien-shot',
+          displayWidth: 26,
+          displayHeight: 52,
+          speedMultiplier: 1.35,
+          useMaliciousIcon: false,
+          originX: fighter.x,
+          originY: fighter.y + 30,
+          angularVelocity: 0,
+        },
+      );
     }
+    this.emitMuzzleFlash(fighter.x, fighter.y + 28, 0xc865ff);
+  }
 
-    const size = useMaliciousIcon ? 48 + world.id * 2 : 42 + world.id * 2;
-    projectile
-      .setTexture(texture)
-      .setActive(true)
-      .setVisible(true)
-      .setPosition(this.boss.x, this.boss.y + 60)
-      .setDisplaySize(size, size)
-      .setDepth(18)
-      .setAlpha(1)
-      .setTint(useMaliciousIcon ? 0xff647c : 0xffffff)
-      .setData('bossProjectile', true)
-      .setData('bossName', world.bossName)
-      .setData('curve', world.id >= 4 ? (patternIndex % 2 === 0 ? 34 : -34) : 0);
-    const body = projectile.body as Phaser.Physics.Arcade.Body;
-    body.enable = true;
-    body.reset(projectile.x, projectile.y);
-    body.setAllowGravity(false);
-    body.setCircle(projectile.width * 0.37);
-    const speed = world.projectileSpeed * this.difficultySpeedMultiplier * (1 + (phase - 1) * 0.1);
-    body.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
-    projectile.setAngularVelocity((patternIndex % 2 === 0 ? 1 : -1) * (150 + world.id * 35));
+  private detonateBossProjectile(
+    projectile: Phaser.Physics.Arcade.Image,
+    radius: number,
+    color: number,
+  ): void {
+    const x = projectile.x;
+    const y = projectile.y;
+    const hitsPlayer =
+      Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y - 35) <= radius;
+    if (hitsPlayer) {
+      this.onEnemyProjectileHit(projectile);
+    } else {
+      this.recycleEnemyProjectile(projectile);
+    }
+    this.emitShockwave(x, y, radius, color);
+    this.emitSparkle(x, y, color);
+    this.cameras.main.shake(radius > 150 ? 280 : 170, radius > 150 ? 0.014 : 0.009);
+    audioManager.play('blast');
   }
 
   private onProjectileHitBoss(projectile: Phaser.Physics.Arcade.Image, boss: Boss): void {
@@ -1373,31 +1703,71 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
+    const hitX = projectile.x;
+    const hitY = projectile.y;
     this.recycleProjectile(projectile);
     const defeated = boss.takeHit(damage);
-    const remainingPercent = Math.max(0, Math.ceil(boss.healthRatio * 100));
-    this.bossHealthFill.setScale(boss.healthRatio, 1);
-    this.bossNameText.setText(
-      `⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠  •  VIDA ${remainingPercent}%`,
-    );
+    this.updateBossHealthHud();
 
     try {
-      this.emitSparkle(projectile.x, projectile.y, weapon.color);
+      this.emitSparkle(hitX, hitY, weapon.color);
       audioManager.play('shot');
     } catch (error) {
       console.error('Se omitió un efecto visual de daño al jefe.', error);
     }
     if (defeated) {
-      this.defeatBoss();
+      const encounterFinished = this.getEncounterBosses().every(
+        (encounterBoss) => encounterBoss.healthRatio <= 0,
+      );
+      if (encounterFinished) {
+        this.defeatBoss();
+      } else {
+        this.retireDefeatedBoss(boss);
+      }
     }
   }
 
-  private projectileTouchesBoss(projectile: Phaser.Physics.Arcade.Image): boolean {
-    const horizontalRadius = Math.max(86, this.boss.displayWidth * 0.39);
-    const verticalRadius = Math.max(120, this.boss.displayHeight * 0.43);
+  private updateBossHealthHud(): void {
+    const encounterBosses = this.getEncounterBosses();
+    const combinedRatio =
+      encounterBosses.reduce((sum, encounterBoss) => sum + encounterBoss.healthRatio, 0) /
+      encounterBosses.length;
+    const remainingPercent = Math.max(0, Math.ceil(combinedRatio * 100));
+    this.bossHealthFill.setScale(combinedRatio, 1);
+    this.bossNameText.setText(
+      `⚠ ${this.currentWorld.bossName.toUpperCase()} ⚠  •  VIDA ${remainingPercent}%`,
+    );
+  }
+
+  private retireDefeatedBoss(defeatedBoss: Boss): void {
+    const body = defeatedBoss.body as Phaser.Physics.Arcade.Body | null;
+    if (body) {
+      body.enable = false;
+      body.setVelocity(0, 0);
+    }
+    defeatedBoss.hideAnimatedParts();
+    defeatedBoss.setActive(false);
+    this.showFloatingText(defeatedBoss.x, defeatedBoss.y, '¡UNO MENOS!', COLORS_HEX.yellow);
+    this.tweens.add({
+      targets: defeatedBoss,
+      alpha: 0,
+      angle: defeatedBoss === this.boss ? -20 : 20,
+      y: defeatedBoss.y - 90,
+      duration: 620,
+      ease: 'Cubic.in',
+      onComplete: () => defeatedBoss.recycle(),
+    });
+  }
+
+  private projectileTouchesBoss(
+    projectile: Phaser.Physics.Arcade.Image,
+    targetBoss: Boss,
+  ): boolean {
+    const horizontalRadius = Math.max(86, targetBoss.displayWidth * 0.39);
+    const verticalRadius = Math.max(95, targetBoss.displayHeight * 0.43);
     return (
-      Math.abs(projectile.x - this.boss.x) <= horizontalRadius &&
-      Math.abs(projectile.y - this.boss.y) <= verticalRadius
+      Math.abs(projectile.x - targetBoss.x) <= horizontalRadius &&
+      Math.abs(projectile.y - targetBoss.y) <= verticalRadius
     );
   }
 
@@ -1408,15 +1778,27 @@ export class GameScene extends Phaser.Scene {
     const defeatedWorld = this.currentWorld;
     this.bossActive = false;
     this.worldTransitioning = true;
+    if (this.combatBike.isActive) {
+      this.deactivateCombatBike(false);
+    }
     this.bossHealthFill.setScale(0, 1);
     this.bossNameText.setText('¡JEFE DERROTADO!  •  VIDA 0%').setColor(COLORS_HEX.yellow);
-    const bossBody = this.boss.body as Phaser.Physics.Arcade.Body | null;
-    if (bossBody) {
-      bossBody.enable = false;
-      bossBody.setVelocity(0, 0);
-    }
-    this.boss.hideAnimatedParts();
-    this.boss.setActive(false);
+    const encounterBosses = this.getEncounterBosses();
+    const effectX =
+      encounterBosses.reduce((sum, encounterBoss) => sum + encounterBoss.x, 0) /
+      encounterBosses.length;
+    const effectY =
+      encounterBosses.reduce((sum, encounterBoss) => sum + encounterBoss.y, 0) /
+      encounterBosses.length;
+    encounterBosses.forEach((encounterBoss) => {
+      const bossBody = encounterBoss.body as Phaser.Physics.Arcade.Body | null;
+      if (bossBody) {
+        bossBody.enable = false;
+        bossBody.setVelocity(0, 0);
+      }
+      encounterBoss.hideAnimatedParts();
+      encounterBoss.setActive(false);
+    });
     this.bossProjectiles.children.each((child) => {
       const projectile = child as Phaser.Physics.Arcade.Image;
       if (projectile.active) this.recycleEnemyProjectile(projectile);
@@ -1441,23 +1823,28 @@ export class GameScene extends Phaser.Scene {
     }
 
     try {
-      this.showFloatingText(this.boss.x, this.boss.y, `+${awardedPoints} • JEFE`, COLORS_HEX.yellow);
-      this.emitShockwave(this.boss.x, this.boss.y, 240, defeatedWorld.color);
+      this.showFloatingText(effectX, effectY, `+${awardedPoints} • JEFE`, COLORS_HEX.yellow);
+      this.emitShockwave(effectX, effectY, 240, defeatedWorld.color);
       this.cameras.main.shake(650, 0.022);
       audioManager.play('combo');
-      this.tweens.add({
-        targets: this.boss,
-        alpha: 0,
-        angle: 24,
-        scaleX: this.boss.scaleX * 1.45,
-        scaleY: this.boss.scaleY * 1.45,
-        duration: 780,
-        ease: 'Cubic.in',
-        onComplete: () => this.boss.recycle(),
+      encounterBosses.forEach((encounterBoss, index) => {
+        if (!encounterBoss.visible) {
+          return;
+        }
+        this.tweens.add({
+          targets: encounterBoss,
+          alpha: 0,
+          angle: index === 0 ? 24 : -24,
+          scaleX: encounterBoss.scaleX * 1.45,
+          scaleY: encounterBoss.scaleY * 1.45,
+          duration: 780,
+          ease: 'Cubic.in',
+          onComplete: () => encounterBoss.recycle(),
+        });
       });
     } catch (error) {
       console.error('Se omitió un efecto de derrota; la campaña continuará.', error);
-      this.boss.recycle();
+      encounterBosses.forEach((encounterBoss) => encounterBoss.recycle());
     }
   }
 
@@ -1774,14 +2161,19 @@ export class GameScene extends Phaser.Scene {
 
   private finishCampaign(): void {
     const finale = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, '¡CAMPAÑA COMPLETA!\nVENCISTE A LOS 5 JEFES', {
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        `¡CAMPAÑA COMPLETA!\nSUPERASTE LOS ${WORLDS.length} MUNDOS`,
+        {
         fontFamily: 'Arial Black',
         fontSize: '55px',
         color: COLORS_HEX.yellow,
         stroke: '#020718',
         strokeThickness: 10,
         align: 'center',
-      })
+        },
+      )
       .setOrigin(0.5)
       .setDepth(80);
     this.tweens.add({
@@ -1833,6 +2225,47 @@ export class GameScene extends Phaser.Scene {
       duration: 220,
       yoyo: true,
       hold: 700,
+      onComplete: () => notice.destroy(),
+    });
+  }
+
+  private spawnCombatBikePickup(): void {
+    const pickupAlreadyFalling = this.items.getChildren().some((child) => {
+      const item = child as FallingItem;
+      return item.active && item.definition?.power === 'combatBike';
+    });
+    if (
+      this.paused ||
+      this.gameOver ||
+      this.worldTransitioning ||
+      this.combatBike.isActive ||
+      pickupAlreadyFalling
+    ) {
+      return;
+    }
+    const definition = POWER_ITEMS.find((item) => item.power === 'combatBike');
+    if (!definition) {
+      return;
+    }
+    this.spawnDefinition(definition, 0.68);
+
+    const notice = this.add
+      .text(GAME_WIDTH / 2, 300, '🏍 PREMIO VIP • MOTO DADDY EN CAMINO', {
+        fontFamily: 'Arial Black',
+        fontSize: '24px',
+        color: COLORS_HEX.yellow,
+        stroke: '#06143a',
+        strokeThickness: 6,
+      })
+      .setOrigin(0.5)
+      .setDepth(48);
+    this.tweens.add({
+      targets: notice,
+      y: 275,
+      alpha: { from: 1, to: 0 },
+      scale: { from: 0.8, to: 1.08 },
+      duration: 1300,
+      ease: 'Cubic.out',
       onComplete: () => notice.destroy(),
     });
   }
@@ -1915,7 +2348,9 @@ export class GameScene extends Phaser.Scene {
     const pool: { def: ItemDefinition; weight: number }[] = [
       ...GOOD_ITEMS.map((def) => ({ def, weight: def.weight })),
       ...BAD_ITEMS.map((def) => ({ def, weight: def.weight * this.badItemWeightMultiplier })),
-      ...POWER_ITEMS.map((def) => ({ def, weight: def.weight })),
+      ...POWER_ITEMS
+        .filter((def) => def.power !== 'combatBike')
+        .map((def) => ({ def, weight: def.weight })),
     ];
     const total = pool.reduce((sum, entry) => sum + entry.weight, 0);
     let roll = Math.random() * total;
@@ -2012,6 +2447,8 @@ export class GameScene extends Phaser.Scene {
 
     if (power === 'shield') {
       this.player.showShield();
+    } else if (power === 'combatBike') {
+      this.activateCombatBike(this.time.now + duration);
     }
   }
 
@@ -2199,6 +2636,23 @@ export class GameScene extends Phaser.Scene {
         : 'RIVAL';
     this.recycleEnemyProjectile(projectile);
 
+    if (this.combatBike.isActive) {
+      const damage = bossProjectile ? 2 : 1;
+      const destroyed = this.combatBike.takeHit(damage);
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 190,
+        `MOTO -${damage} BLINDAJE`,
+        destroyed ? COLORS_HEX.red : COLORS_HEX.yellow,
+      );
+      this.emitSparkle(x, y, destroyed ? 0xff4d2e : 0xffd21e);
+      this.cameras.main.shake(destroyed ? 260 : 110, destroyed ? 0.016 : 0.007);
+      if (destroyed) {
+        this.deactivateCombatBike(true);
+      }
+      return;
+    }
+
     if (this.isPowerActive('shield') || this.player.isCovering()) {
       if (!this.isPowerActive('shield')) {
         this.coverEnergy = Math.max(0, this.coverEnergy - (bossProjectile ? 24 : 16));
@@ -2305,7 +2759,11 @@ export class GameScene extends Phaser.Scene {
     projectile.setAngularVelocity(0);
     projectile.disableBody(true, true);
     projectile.setActive(false).setVisible(false).clearTint();
-    projectile.setData('bossProjectile', false).setData('curve', 0);
+    projectile
+      .setData('bossProjectile', false)
+      .setData('projectileKind', 'standard')
+      .setData('nextShotAt', Number.POSITIVE_INFINITY)
+      .setData('curve', 0);
   }
 
   private tryFireWeapon(fromFreshPress = false): void {
@@ -2541,6 +2999,52 @@ export class GameScene extends Phaser.Scene {
   // Powers
   // ---------------------------------------------------------------------------
 
+  private activateCombatBike(expiresAt: number): void {
+    this.player.setCovering(false);
+    this.combatBike.activate(this.player, expiresAt);
+    this.nextCombatBikeShotAt = this.time.now + 180;
+    this.equippedWeaponSprite?.setVisible(false);
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 230,
+      '¡MOTO DE COMBATE • 10 SEGUNDOS!',
+      COLORS_HEX.yellow,
+    );
+    this.cameras.main.shake(180, 0.008);
+  }
+
+  private fireCombatBikeVolley(): void {
+    const y = this.player.y - 128;
+    this.spawnProjectile(this.player.x - 34, y, 'modern', -95);
+    this.spawnProjectile(this.player.x + 34, y, 'modern', 95);
+    this.emitMuzzleFlash(this.player.x - 38, y + 10, 0xffd21e);
+    this.emitMuzzleFlash(this.player.x + 38, y + 10, 0x43d9ff);
+    audioManager.play('shot');
+  }
+
+  private deactivateCombatBike(destroyed: boolean): void {
+    if (!this.combatBike.isActive) {
+      return;
+    }
+    const x = this.combatBike.x || this.player.x;
+    const y = this.combatBike.y || this.player.y;
+    this.activePowers.delete('combatBike');
+    this.combatBike.deactivate(this.player, destroyed);
+    this.equippedWeaponSprite?.setVisible(Boolean(this.activeWeapon));
+    if (destroyed) {
+      this.nextEnemyDamageAt = this.time.now + 850;
+      this.emitShockwave(x, y - 60, 165, 0xff4d2e);
+      this.emitSparkle(x, y - 60, 0xffd21e);
+      this.showFloatingText(x, y - 190, '¡MOTO DESTRUIDA!', COLORS_HEX.red);
+      this.cameras.main.shake(360, 0.018);
+      audioManager.play('blast');
+    } else {
+      this.showFloatingText(x, y - 190, 'MOTO AGOTADA • DADDY CONTINÚA', '#9fdcff');
+      audioManager.play('power');
+    }
+    this.updateHud();
+  }
+
   private isPowerActive(power: PowerType): boolean {
     const expiry = this.activePowers.get(power);
     return expiry !== undefined && expiry > this.time.now;
@@ -2552,6 +3056,8 @@ export class GameScene extends Phaser.Scene {
         this.activePowers.delete(power);
         if (power === 'shield') {
           this.player.hideShield();
+        } else if (power === 'combatBike') {
+          this.deactivateCombatBike(false);
         }
       }
     }
@@ -2564,6 +3070,7 @@ export class GameScene extends Phaser.Scene {
       slow: '🥤 Lento',
       magnet: '🏍 Imán',
       combo: '🔥 Combo',
+      combatBike: '🏍 Moto combate',
     };
     const active: string[] = [];
     for (const power of this.activePowers.keys()) {
@@ -2583,7 +3090,9 @@ export class GameScene extends Phaser.Scene {
     this.livesText.setText('❤️'.repeat(Math.max(0, this.lives)) || '💀');
     this.comboText.setText(this.comboCount >= 2 ? `Combo: ${this.comboCount}` : '');
     this.worldText
-      .setText(`MUNDO ${this.currentWorld.id}/5  •  ${this.currentWorld.name.toUpperCase()}`)
+      .setText(
+        `MUNDO ${this.currentWorld.id}/${WORLDS.length}  •  ${this.currentWorld.name.toUpperCase()}`,
+      )
       .setColor(this.currentWorld.colorHex);
     if (this.activeWeapon) {
       const weapon = WEAPONS[this.activeWeapon];

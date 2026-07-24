@@ -5,7 +5,7 @@
 
 export type ItemCategory = 'good' | 'bad' | 'power' | 'weapon';
 
-export type PowerType = 'shield' | 'double' | 'slow' | 'magnet' | 'combo';
+export type PowerType = 'shield' | 'double' | 'slow' | 'magnet' | 'combo' | 'combatBike';
 
 export type WeaponType = 'modern' | 'historic' | 'poseidon';
 
@@ -54,6 +54,7 @@ export const POWER_ITEMS: ItemDefinition[] = [
   { key: 'mango-habanero', label: 'Mango habanero', category: 'power', power: 'double', color: 0xff8c00, weight: 2 },
   { key: 'refresco-frio', label: 'Refresco frío', category: 'power', power: 'slow', color: 0x00bcd4, weight: 2 },
   { key: 'moto-reparto', label: 'Moto de reparto', category: 'power', power: 'magnet', color: 0xe6262b, weight: 1 },
+  { key: 'moto-combate-premio', label: 'Moto Daddy de combate', category: 'power', power: 'combatBike', color: 0xffd21e, weight: 1.5 },
   { key: 'combo-daddy', label: 'Combo Daddy', category: 'power', power: 'combo', color: 0xffd21e, weight: 1 },
 ];
 
@@ -102,6 +103,7 @@ export const EXTRA_IMAGE_KEYS = [
   'daddy-pollo',
   'fondo-los-cabos',
   'logo-daddy-game-chicken',
+  'moto-combate-daddy',
 ] as const;
 
 /**
@@ -113,4 +115,5 @@ export const POWER_DURATIONS: Record<PowerType, number> = {
   slow: 6000,
   magnet: 5000,
   combo: 6000,
+  combatBike: 10000,
 };

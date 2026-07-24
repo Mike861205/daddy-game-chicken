@@ -189,7 +189,7 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
-/* Six-second neon intro cinematic                                    */
+/* Neon intro cinematic for the eight-world campaign                  */
 /* ------------------------------------------------------------------ */
 #loading-screen {
   position: absolute;
@@ -357,6 +357,14 @@ body {
 .intro-boss-portal.is-left { left: 2%; }
 .intro-boss-portal.is-right { left: calc(98% - var(--boss-portal-width)); }
 
+.intro-boss-portal.is-dual {
+  --boss-portal-width: clamp(230px, 36vh, 330px);
+}
+
+.intro-boss-portal.is-swapping {
+  animation: boss-portal-arrival 0.42s cubic-bezier(.16,.9,.25,1.25);
+}
+
 .intro-boss {
   position: absolute;
   inset: 0 0 28px;
@@ -380,7 +388,7 @@ body {
     drop-shadow(0 12px 7px rgba(0, 0, 0, 0.72))
     drop-shadow(0 0 13px var(--daddy-red))
     drop-shadow(0 0 26px rgba(255, 210, 30, 0.52));
-  animation: boss-intro-movement-right 0.86s ease-in-out infinite;
+  animation: boss-intro-movement-right 1.35s ease-in-out infinite;
 }
 
 .intro-boss-portal.is-left .intro-boss {
@@ -389,6 +397,147 @@ body {
 
 .intro-boss-portal.is-left .intro-boss.is-active {
   animation-name: boss-intro-movement-left;
+}
+
+.intro-boss--aircraft.is-active {
+  animation-name: boss-aircraft-hover;
+}
+
+.intro-boss--carrier.is-active {
+  animation-name: boss-carrier-hover;
+}
+
+.intro-boss-portal.is-dual .intro-boss--twin {
+  width: 64%;
+  height: calc(100% - 34px);
+}
+
+.intro-boss-portal.is-dual .intro-boss--fire.is-active {
+  left: -2%;
+  animation: boss-twin-fire 1.28s ease-in-out infinite;
+}
+
+.intro-boss-portal.is-dual .intro-boss--ice.is-active {
+  right: -2%;
+  left: auto;
+  animation: boss-twin-ice 1.28s ease-in-out -0.22s infinite;
+}
+
+.boss-power-stream {
+  --power-distance: clamp(190px, 42vw, 390px);
+  position: absolute;
+  z-index: 6;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.intro-boss-portal.is-right .boss-power-stream {
+  --power-distance: clamp(-390px, -42vw, -190px);
+}
+
+.boss-power {
+  --power-angle: 0deg;
+  --power-lift: -18px;
+  position: absolute;
+  top: 42%;
+  left: 48%;
+  display: block;
+  width: clamp(18px, 3vh, 28px);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  opacity: 0;
+  background: radial-gradient(circle at 35% 30%, #fff 0 12%, #ffd21e 24%, #ff5b27 50%, #9b071f 72%, transparent 75%);
+  box-shadow: 0 0 7px #fff, 0 0 18px #ff5528, 0 0 30px rgba(255, 85, 40, 0.7);
+  animation: boss-power-flight 1.12s cubic-bezier(.18,.58,.2,1) infinite;
+  will-change: transform, opacity;
+}
+
+.boss-power::after {
+  content: '';
+  position: absolute;
+  inset: 24%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: inherit;
+}
+
+.boss-power--two {
+  top: 55%;
+  --power-lift: 12px;
+  animation-delay: -0.28s;
+}
+
+.boss-power--three {
+  top: 35%;
+  --power-lift: -32px;
+  animation-delay: -0.56s;
+}
+
+.boss-power--four {
+  top: 63%;
+  --power-lift: 26px;
+  animation-delay: -0.84s;
+}
+
+.intro-boss-portal[data-power='cannon'] .boss-power {
+  background: radial-gradient(circle at 34% 28%, #fff 0 6%, #ffcb68 8%, #39445e 24%, #11192c 58%, #02040b 72%);
+  border: 2px solid #ffbd59;
+  box-shadow: 0 0 7px #fff, 0 0 19px #ff9d2e;
+}
+
+.intro-boss-portal[data-power='abyss'] .boss-power {
+  background: radial-gradient(circle at 34% 30%, #fff 0 12%, #9fffff 24%, #21e6e6 48%, #0757b8 72%, transparent 75%);
+  box-shadow: 0 0 8px #fff, 0 0 20px #43d9ff, 0 0 34px rgba(33, 230, 230, 0.7);
+}
+
+.intro-boss-portal[data-power='toxic'] .boss-power {
+  background: radial-gradient(circle at 35% 30%, #fff 0 8%, #e9ff6f 20%, #8aff3d 47%, #1e8c30 67%, transparent 72%);
+  box-shadow: 0 0 8px #fff, 0 0 22px #8aff3d, 0 0 34px rgba(98, 255, 45, 0.7);
+}
+
+.intro-boss-portal[data-power='void'] .boss-power {
+  border-radius: 26% 74% 32% 68%;
+  background: radial-gradient(circle at 40% 35%, #fff 0 9%, #ff8cff 18%, #b932ff 46%, #3b0879 70%, transparent 73%);
+  box-shadow: 0 0 8px #fff, 0 0 22px #c34dff, 0 0 36px rgba(195, 77, 255, 0.78);
+}
+
+.intro-boss-portal[data-power='dual'] .boss-power:nth-of-type(odd) {
+  background: radial-gradient(circle at 35% 30%, #fff 0 10%, #ffd44d 22%, #ff512f 50%, #8e071f 72%, transparent 75%);
+  box-shadow: 0 0 8px #fff, 0 0 23px #ff4e2d;
+}
+
+.intro-boss-portal[data-power='dual'] .boss-power:nth-of-type(even) {
+  clip-path: polygon(50% 0, 85% 35%, 67% 100%, 33% 100%, 15% 35%);
+  border-radius: 0;
+  background: linear-gradient(145deg, #fff 0 18%, #a7ffff 20% 44%, #22baff 46% 70%, #0753a8 72%);
+  box-shadow: 0 0 9px #fff, 0 0 24px #43d9ff;
+}
+
+.intro-boss-portal[data-power='atomic'] .boss-power {
+  width: clamp(17px, 2.6vh, 24px);
+  height: clamp(30px, 5vh, 44px);
+  aspect-ratio: auto;
+  border: 2px solid #ffc247;
+  border-radius: 50% 50% 44% 44%;
+  background: radial-gradient(circle at 50% 56%, #ffdc58 0 18%, #273147 20% 48%, #080c17 70%);
+  box-shadow: 0 0 8px #fff, 0 0 22px #ffb31a;
+}
+
+.intro-boss-portal[data-power='atomic'] .boss-power:nth-of-type(even) {
+  width: 10px;
+  height: clamp(45px, 8vh, 72px);
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #43d9ff, #fff 48%, #43d9ff);
+  box-shadow: 0 0 9px #fff, 0 0 24px #43d9ff;
+}
+
+.intro-boss-portal[data-power='alien'] .boss-power {
+  width: clamp(24px, 4vh, 38px);
+  border-radius: 0;
+  clip-path: polygon(50% 0, 100% 38%, 76% 72%, 50% 100%, 24% 72%, 0 38%);
+  background: radial-gradient(circle at 50% 42%, #fff 0 10%, #d778ff 18% 39%, #5720a9 42% 70%, #110529 72%);
+  box-shadow: 0 0 9px #fff, 0 0 24px #c865ff, 0 0 38px rgba(118, 47, 255, 0.72);
 }
 
 .boss-warning-ring {
@@ -433,15 +582,77 @@ body {
   z-index: 5;
   bottom: -4px;
   left: -14%;
-  width: clamp(140px, 21vh, 205px);
-  aspect-ratio: 1;
+  width: clamp(225px, 34vh, 320px);
+  aspect-ratio: 1.62;
   transform: translate3d(0, 0, 0) scale(0.86);
   will-change: transform;
 }
 
+.runner-bike,
 .runner-sprite {
   position: absolute;
+  transition:
+    opacity 0.28s ease,
+    filter 0.28s ease,
+    transform 0.34s cubic-bezier(.2, .8, .25, 1);
+}
+
+.runner-bike {
   inset: 0;
+  opacity: 1;
+  filter:
+    drop-shadow(0 9px 5px rgba(0, 0, 0, 0.58))
+    drop-shadow(0 0 10px rgba(255, 210, 30, 0.58));
+  animation: intro-bike-ride 0.34s ease-in-out infinite;
+}
+
+.runner-bike-sprite {
+  position: absolute;
+  inset: 0;
+  background: url('/assets/images/moto-combate-daddy.png') center / contain no-repeat;
+  transform: scaleX(-1);
+}
+
+.runner-bike-logo {
+  position: absolute;
+  z-index: 4;
+  top: 28%;
+  left: 20.5%;
+  width: 21%;
+  height: 16%;
+  object-fit: contain;
+  filter:
+    drop-shadow(0 1px 0 #fff)
+    drop-shadow(0 0 5px rgba(255, 210, 30, 0.95));
+  transform: translateX(-50%) rotate(-1deg);
+  animation: bike-logo-glow 0.9s ease-in-out infinite;
+}
+
+.runner-bike-wheel {
+  position: absolute;
+  z-index: 3;
+  bottom: 8.5%;
+  width: 15.2%;
+  aspect-ratio: 1;
+  border: clamp(2px, .45vh, 4px) solid rgba(255, 210, 30, 0.96);
+  border-radius: 50%;
+  opacity: .9;
+  background:
+    repeating-conic-gradient(from 0deg, #43d9ff 0 8deg, transparent 8deg 30deg),
+    radial-gradient(circle, transparent 0 45%, rgba(6, 20, 58, .85) 47% 62%, transparent 64%);
+  box-shadow: 0 0 8px rgba(67, 217, 255, .82);
+  animation: intro-wheel-spin .34s linear infinite;
+}
+
+.runner-bike-wheel--rear { left: 13.5%; }
+.runner-bike-wheel--front { right: 12.9%; }
+
+.runner-sprite {
+  bottom: 0;
+  left: 18%;
+  width: 62%;
+  aspect-ratio: 1;
+  opacity: 0;
   background-image: url('/assets/images/daddy-pollo-armed-anim.png');
   background-repeat: no-repeat;
   background-size: 300% 200%;
@@ -452,6 +663,24 @@ body {
   animation:
     runner-frames 0.72s steps(1) infinite,
     runner-gait 0.36s ease-in-out infinite;
+}
+
+.intro-runner.is-running-phase .runner-bike {
+  opacity: 0;
+  filter: blur(4px) brightness(1.8);
+  transform: translate3d(-28px, 8px, 0) scale(.82);
+  pointer-events: none;
+}
+
+.intro-runner.is-running-phase .runner-sprite {
+  opacity: 1;
+}
+
+.intro-runner.is-bike-phase .intro-shot {
+  top: 31%;
+  left: 87%;
+  background: linear-gradient(90deg, #fff, var(--daddy-yellow) 40%, transparent);
+  box-shadow: 0 0 7px #fff, 0 0 15px var(--daddy-yellow);
 }
 
 .intro-shot {
@@ -636,6 +865,18 @@ body {
   0%, 100% { transform: translate3d(0, 0, 0) rotate(-1deg); }
   50% { transform: translate3d(0, -7px, 0) rotate(1deg); }
 }
+@keyframes intro-bike-ride {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-.4deg); }
+  50% { transform: translate3d(0, -4px, 0) rotate(.6deg); }
+}
+@keyframes intro-wheel-spin { to { rotate: 360deg; } }
+@keyframes bike-logo-glow {
+  50% {
+    filter:
+      drop-shadow(0 1px 0 #fff)
+      drop-shadow(0 0 9px rgba(255, 210, 30, 1));
+  }
+}
 @keyframes boss-intro-movement-right {
   0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(-2deg); }
   50% { transform: translate3d(-8px, -9px, 0) scale(0.96) rotate(2deg); }
@@ -643,6 +884,44 @@ body {
 @keyframes boss-intro-movement-left {
   0%, 100% { transform: translate3d(0, 5px, 0) scale(0.9) rotate(2deg); }
   50% { transform: translate3d(8px, -9px, 0) scale(0.96) rotate(-2deg); }
+}
+@keyframes boss-portal-arrival {
+  0% { opacity: 0; filter: brightness(2.4) blur(5px); scale: .72; }
+  58% { opacity: 1; filter: brightness(1.35) blur(0); scale: 1.06; }
+  100% { opacity: 1; filter: brightness(1) blur(0); scale: 1; }
+}
+@keyframes boss-aircraft-hover {
+  0%, 100% { transform: translate3d(0, 8px, 0) scale(.92) rotate(-2deg); }
+  35% { transform: translate3d(-10px, -5px, 0) scale(.98) rotate(2deg); }
+  68% { transform: translate3d(6px, -11px, 0) scale(.95) rotate(-1deg); }
+}
+@keyframes boss-carrier-hover {
+  0%, 100% { transform: translate3d(0, 7px, 0) scale(.9) rotate(-1deg); }
+  50% { transform: translate3d(0, -12px, 0) scale(.98) rotate(1deg); }
+}
+@keyframes boss-twin-fire {
+  0%, 100% { transform: translate3d(-7px, 8px, 0) scale(.9) rotate(-3deg); }
+  50% { transform: translate3d(1px, -10px, 0) scale(.96) rotate(2deg); }
+}
+@keyframes boss-twin-ice {
+  0%, 100% { transform: translate3d(7px, -3px, 0) scale(.9) rotate(3deg); }
+  50% { transform: translate3d(-1px, -16px, 0) scale(.96) rotate(-2deg); }
+}
+@keyframes boss-power-flight {
+  0%, 8% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) scale(.18) rotate(var(--power-angle));
+  }
+  16% {
+    opacity: 1;
+  }
+  72% {
+    opacity: .96;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--power-distance), var(--power-lift), 0) scale(1.2) rotate(340deg);
+  }
 }
 @keyframes intro-shot-flight {
   0%, 12% { opacity: 0; transform: translate3d(0, 0, 0) scaleX(0.2); }
@@ -666,9 +945,12 @@ body {
   .loading-kicker { top: 105px; }
   .loading-title { top: 143px; font-size: clamp(27px, 9vw, 42px); }
   .loading-subtitle { top: 190px; }
-  .intro-stage { top: 235px; height: min(31vh, 230px); width: 96vw; }
-  .intro-runner { width: clamp(130px, 23vh, 180px); }
+  .intro-stage { top: 225px; height: min(34vh, 245px); width: 96vw; }
+  .intro-runner { width: clamp(210px, 32vh, 285px); }
   .intro-boss-portal { --boss-portal-width: clamp(120px, 22vh, 165px); top: 3%; height: 86%; }
+  .intro-boss-portal.is-dual { --boss-portal-width: clamp(190px, 31vh, 245px); }
+  .boss-power-stream { --power-distance: clamp(150px, 48vw, 240px); }
+  .intro-boss-portal.is-right .boss-power-stream { --power-distance: clamp(-240px, -48vw, -150px); }
   .intro-boss-label small { font-size: 7px; }
   .intro-boss-label strong { font-size: 10px; }
   .floating-icon { width: 46px; opacity: .86; }
@@ -686,8 +968,22 @@ body {
   .loading-subtitle { top: 130px; }
   .intro-stage { top: 155px; height: 160px; }
   .intro-boss-portal { --boss-portal-width: 116px; height: 92%; }
+  .intro-boss-portal.is-dual { --boss-portal-width: 188px; }
   .loading-progress-wrap { bottom: 16px; }
   .floating-icon { width: 38px; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .loading-brand { left: 14px; top: 10px; width: 118px; transform: none; }
+  .loading-kicker { top: 18px; left: 50%; }
+  .loading-title { top: 50px; font-size: clamp(26px, 5vw, 42px); }
+  .loading-subtitle { top: 96px; }
+  .intro-stage { top: 120px; width: 84vw; height: min(46vh, 205px); }
+  .intro-runner { width: clamp(205px, 52vh, 270px); }
+  .intro-boss-portal { --boss-portal-width: clamp(112px, 34vh, 170px); }
+  .intro-boss-portal.is-dual { --boss-portal-width: clamp(185px, 52vh, 270px); }
+  .loading-progress-wrap { right: 18px; bottom: 14px; left: auto; width: min(54vw, 520px); transform: none; }
+  .floating-icon { display: none; }
 }
 
 @keyframes dgc-pop {
@@ -948,6 +1244,9 @@ body {
   .matrix-rain span,
   .intro-orbit,
   .runner-sprite,
+  .runner-bike,
+  .runner-bike-logo,
+  .runner-bike-wheel,
   .runner-weapon,
   .runner-gun,
   .muzzle-flash,
@@ -960,8 +1259,13 @@ body {
   }
 
   .intro-boss,
-  .boss-warning-ring {
+  .boss-warning-ring,
+  .boss-power {
     animation: none;
+  }
+
+  .boss-power {
+    opacity: .55;
   }
 
   .intro-runner {

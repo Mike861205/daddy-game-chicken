@@ -17,6 +17,9 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
   private baseScaleY = 1;
   private readonly categoryAura: Phaser.GameObjects.Arc;
   private readonly dangerLabel: Phaser.GameObjects.Text;
+  private readonly combatBikeLogo: Phaser.GameObjects.Image;
+  private combatBikeLogoBaseScaleX = 1;
+  private combatBikeLogoBaseScaleY = 1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, '__DEFAULT');
@@ -40,6 +43,11 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
       .setOrigin(0.5)
       .setDepth(10)
       .setVisible(false);
+    this.combatBikeLogo = scene.add
+      .image(x, y, 'logo-daddy-game-chicken')
+      .setDisplaySize(32, 14)
+      .setDepth(9)
+      .setVisible(false);
     this.setActive(false).setVisible(false);
   }
 
@@ -47,12 +55,18 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     this.definition = definition;
     this.setTexture(definition.key);
     const size = definition.category === 'weapon' ? 98 : definition.category === 'power' ? 88 : 80;
-    this.setDisplaySize(size, size);
+    const isCombatBike = definition.power === 'combatBike';
+    this.setDisplaySize(isCombatBike ? 150 : size, isCombatBike ? 82 : size);
     this.enableBody(true, x, -60, true, true);
     this.setActive(true).setVisible(true);
     this.setAngle(0);
     this.setAlpha(1);
     this.setDepth(8);
+    this.combatBikeLogo
+      .setDisplaySize(32, 14)
+      .setVisible(isCombatBike);
+    this.combatBikeLogoBaseScaleX = this.combatBikeLogo.scaleX;
+    this.combatBikeLogoBaseScaleY = this.combatBikeLogo.scaleY;
 
     const auraColor = definition.category === 'bad'
       ? 0xff234f
@@ -63,7 +77,7 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
           : 0x43d9ff;
     this.categoryAura
       .setPosition(x, -60)
-      .setDisplaySize(size + 34, size + 34)
+      .setDisplaySize(isCombatBike ? 174 : size + 34, isCombatBike ? 106 : size + 34)
       .setFillStyle(auraColor, definition.category === 'bad' ? 0.24 : 0.1)
       .setStrokeStyle(definition.category === 'bad' ? 6 : 3, auraColor, 0.9)
       .setVisible(true);
@@ -78,6 +92,7 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
 
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
+    this.syncCombatBikeLogo();
     this.flightAge = 0;
     this.flightPhase = Phaser.Math.FloatBetween(0, Math.PI * 2);
 
@@ -131,6 +146,7 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     const pulseStrength = this.definition.category === 'weapon' ? 0.085 : 0.035;
     const pulse = Math.sin(this.flightAge * 0.006 + this.flightPhase) * pulseStrength;
     this.setScale(this.baseScaleX * (1 + pulse), this.baseScaleY * (1 - pulse * 0.45));
+    this.syncCombatBikeLogo();
 
     const indicatorPulse = (Math.sin(this.flightAge * 0.01 + this.flightPhase) + 1) / 2;
     const isDanger = this.definition.category === 'bad';
@@ -158,6 +174,7 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
     this.clearTint();
     this.categoryAura.setVisible(false);
     this.dangerLabel.setVisible(false);
+    this.combatBikeLogo.setVisible(false);
     this.disableBody(true, true);
     this.setActive(false).setVisible(false);
   }
@@ -165,6 +182,28 @@ export class FallingItem extends Phaser.Physics.Arcade.Sprite {
   destroy(fromScene?: boolean): void {
     this.categoryAura.destroy();
     this.dangerLabel.destroy();
+    this.combatBikeLogo.destroy();
     super.destroy(fromScene);
+  }
+
+  private syncCombatBikeLogo(): void {
+    if (this.definition?.power !== 'combatBike' || !this.combatBikeLogo.visible) {
+      return;
+    }
+    const angle = Phaser.Math.DegToRad(this.angle);
+    const scaleRatioX = this.baseScaleX === 0 ? 1 : this.scaleX / this.baseScaleX;
+    const scaleRatioY = this.baseScaleY === 0 ? 1 : this.scaleY / this.baseScaleY;
+    const offsetX = 43 * scaleRatioX;
+    const offsetY = -22 * scaleRatioY;
+    this.combatBikeLogo
+      .setPosition(
+        this.x + offsetX * Math.cos(angle) - offsetY * Math.sin(angle),
+        this.y + offsetX * Math.sin(angle) + offsetY * Math.cos(angle),
+      )
+      .setAngle(this.angle)
+      .setScale(
+        this.combatBikeLogoBaseScaleX * scaleRatioX,
+        this.combatBikeLogoBaseScaleY * scaleRatioY,
+      );
   }
 }

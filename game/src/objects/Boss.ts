@@ -7,7 +7,19 @@ export interface BossUpdateResult {
   phase: number;
 }
 
-/** Large animated final enemy shared by the five campaign worlds. */
+export interface BossSpawnOptions {
+  texture?: string;
+  startX?: number;
+  baseY?: number;
+  direction?: -1 | 1;
+  displayWidth?: number;
+  displayHeight?: number;
+  patrolMinX?: number;
+  patrolMaxX?: number;
+  healthMultiplier?: number;
+}
+
+/** Large animated final enemy shared by the campaign worlds. */
 export class Boss extends Phaser.Physics.Arcade.Sprite {
   public definition!: WorldDefinition;
 
@@ -19,6 +31,12 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   private direction: -1 | 1 = 1;
   private nextAttackAt = 0;
   private phaseOffset = 0;
+  private spawnedAt = 0;
+  private readonly entranceDuration = 1150;
+  private readonly entranceStartY = -180;
+  private patrolMinX?: number;
+  private patrolMaxX?: number;
+  private articulated = true;
   private attackMotionUntil = 0;
   private hitMotionUntil = 0;
   private readonly headLayer: Phaser.GameObjects.Image;
@@ -54,32 +72,51 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     return Phaser.Math.Clamp(this.health / this.maxHealth, 0, 1);
   }
 
-  spawn(definition: WorldDefinition, time: number, difficultyLevel: number): void {
+  spawn(
+    definition: WorldDefinition,
+    time: number,
+    difficultyLevel: number,
+    options: BossSpawnOptions = {},
+  ): void {
     this.definition = definition;
     const difficultyHealth = 0.82 + difficultyLevel * 0.036;
-    this.maxHealth = Math.max(12, Math.round(definition.bossHealth * difficultyHealth));
+    this.maxHealth = Math.max(
+      12,
+      Math.round(definition.bossHealth * difficultyHealth * (options.healthMultiplier ?? 1)),
+    );
     this.health = this.maxHealth;
-    this.baseY = 325;
+    this.baseY = options.baseY ?? 325;
     // Alternate the entrance direction between worlds so bosses can cross the
     // arena in both directions.
-    this.direction = definition.id % 2 === 0 ? -1 : 1;
+    this.direction = options.direction ?? (definition.id % 2 === 0 ? -1 : 1);
+    this.patrolMinX = options.patrolMinX;
+    this.patrolMaxX = options.patrolMaxX;
+    this.spawnedAt = time;
     this.nextAttackAt =
-      time + Phaser.Math.Clamp(1500 - difficultyLevel * 70, 750, 1450);
+      time + this.entranceDuration + Phaser.Math.Clamp(700 - difficultyLevel * 25, 350, 650);
     this.phaseOffset = Phaser.Math.FloatBetween(0, Math.PI * 2);
     this.attackMotionUntil = 0;
     this.hitMotionUntil = 0;
 
-    this.setTexture(definition.bossTexture);
-    this.setDisplaySize(330, 430);
+    const texture = options.texture ?? definition.bossTexture;
+    this.articulated =
+      definition.bossPattern !== 'atomic-aircraft' &&
+      definition.bossPattern !== 'alien-carrier';
+    this.setTexture(texture);
+    this.setDisplaySize(options.displayWidth ?? 330, options.displayHeight ?? 430);
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
-    this.enableBody(true, GAME_WIDTH / 2, -180, true, true);
+    this.enableBody(true, options.startX ?? GAME_WIDTH / 2, this.entranceStartY, true, true);
     this.setActive(true).setVisible(true).setAlpha(1).setAngle(0).setDepth(11).clearTint();
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setSize(this.width * 0.58, this.height * 0.68);
     body.setVelocity(0, 0);
-    this.configureAnimatedParts(definition.bossTexture);
+    if (this.articulated) {
+      this.configureAnimatedParts(texture);
+    } else {
+      this.hideAnimatedParts();
+    }
     this.syncAnimatedParts(time, 1);
   }
 
@@ -102,12 +139,27 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     const frameSeconds = Phaser.Math.Clamp(delta, 0, 50) / 1000;
     const halfWidth = this.displayWidth * 0.5;
     let nextX = this.x + patrolSpeed * this.direction * frameSeconds;
-    if (this.direction > 0 && nextX - halfWidth > GAME_WIDTH) {
+    if (this.patrolMinX !== undefined && this.patrolMaxX !== undefined) {
+      if (nextX <= this.patrolMinX) {
+        nextX = this.patrolMinX;
+        this.direction = 1;
+      } else if (nextX >= this.patrolMaxX) {
+        nextX = this.patrolMaxX;
+        this.direction = -1;
+      }
+    } else if (this.direction > 0 && nextX - halfWidth > GAME_WIDTH) {
       nextX = -halfWidth;
     } else if (this.direction < 0 && nextX + halfWidth < 0) {
       nextX = GAME_WIDTH + halfWidth;
     }
-    const nextY = this.baseY + hover * (12 + phase * 3);
+    const entranceProgress = Phaser.Math.Clamp(
+      (time - this.spawnedAt) / this.entranceDuration,
+      0,
+      1,
+    );
+    const entranceEase = Phaser.Math.Easing.Cubic.Out(entranceProgress);
+    const settledY = this.baseY + hover * (12 + phase * 3);
+    const nextY = Phaser.Math.Linear(this.entranceStartY, settledY, entranceEase);
     body.reset(nextX, nextY);
     body.setVelocity(0, 0);
     this.setPosition(nextX, nextY);
@@ -119,7 +171,7 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     );
     this.syncAnimatedParts(time, phase);
 
-    if (time < this.nextAttackAt) {
+    if (entranceProgress < 1 || time < this.nextAttackAt) {
       return { shouldAttack: false, phase };
     }
     // When wrapping around the arena, hold the ready attack until the boss is
@@ -146,6 +198,8 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
     const frame = this.scene.textures.getFrame(texture);
     const width = frame?.width ?? this.width;
     const height = frame?.height ?? this.height;
+    const displayWidth = this.displayWidth;
+    const displayHeight = this.displayHeight;
     const configure = (
       part: Phaser.GameObjects.Image,
       x: number,
@@ -161,15 +215,15 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
           Math.round(width * cropWidth),
           Math.round(height * cropHeight),
         )
-        .setDisplaySize(330, 430)
+        .setDisplaySize(displayWidth, displayHeight)
         .setOrigin(0.5)
         .setAlpha(1)
         .setActive(true)
         .setVisible(true);
     };
 
-    // All five boss portraits use the same canvas proportions. The overlapping
-    // crops add articulated motion while preserving their original artwork.
+    // Humanoid boss portraits share the same canvas proportions. The
+    // overlapping crops add articulated motion while preserving the artwork.
     configure(this.headLayer, 0.16, 0, 0.68, 0.32);
     configure(this.leftArmLayer, 0, 0.18, 0.45, 0.5);
     configure(this.rightArmLayer, 0.55, 0.18, 0.45, 0.5);
@@ -178,6 +232,9 @@ export class Boss extends Phaser.Physics.Arcade.Sprite {
   }
 
   private syncAnimatedParts(time: number, phase: number): void {
+    if (!this.articulated) {
+      return;
+    }
     const gait = Math.sin(time * (0.009 + phase * 0.0015) + this.phaseOffset);
     const stride = Math.cos(time * (0.009 + phase * 0.0015) + this.phaseOffset);
     const attackProgress = Phaser.Math.Clamp(
