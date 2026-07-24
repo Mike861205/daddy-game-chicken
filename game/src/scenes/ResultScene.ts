@@ -13,6 +13,7 @@ import { api, DEFAULT_CONFIG } from '../services/api.js';
 import { storage } from '../services/storage.js';
 import { removeRegistrationOverlays } from '../services/registrationForm.js';
 import type { GameResult, PublicConfig, RewardResponse } from '../types.js';
+import { buildWhatsAppUrl } from '../utils/whatsapp.js';
 
 /**
  * ResultScene: shows the final score, personal best, promotion, and actions.
@@ -259,7 +260,6 @@ export class ResultScene extends Phaser.Scene {
     }
 
     const configuredPhone = this.config?.contact.businessPhone ?? '6241548148';
-    const destinationPhone = configuredPhone.length === 10 ? `52${configuredPhone}` : configuredPhone;
     const playerName = (this.registry.get(REGISTRY.playerName) as string | undefined) ?? this.getNickname();
     const playerPhone = (this.registry.get(REGISTRY.playerPhone) as string | undefined) ?? 'No registrado';
     const promotion = resolvePromotion(this.result.score, this.config.promotions);
@@ -275,8 +275,7 @@ export class ResultScene extends Phaser.Scene {
       `Código de canje: ${rewardCode}.`,
       'Quiero solicitar el canje de mi premio.',
     ].join('\n');
-    const url = `https://wa.me/${destinationPhone}?text=${encodeURIComponent(message)}`;
-    window.open(url, '_blank', 'noopener');
+    window.open(buildWhatsAppUrl(configuredPhone, message), '_blank', 'noopener');
   }
 
   private showPromotion(label: string, code?: string): void {

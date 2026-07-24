@@ -616,10 +616,11 @@ body {
 .runner-bike-logo {
   position: absolute;
   z-index: 4;
-  top: 28%;
-  left: 20.5%;
-  width: 21%;
-  height: 16%;
+  /* Calibrated against the usable blue panel inside the mirrored cargo box. */
+  top: 30.8%;
+  left: 17.4%;
+  width: 17.2%;
+  height: 14.2%;
   object-fit: contain;
   filter:
     drop-shadow(0 1px 0 #fff)
@@ -631,8 +632,10 @@ body {
 .runner-bike-wheel {
   position: absolute;
   z-index: 3;
-  bottom: 8.5%;
-  width: 15.2%;
+  /* Percentage geometry keeps the hubs locked to the source image at every
+     responsive runner size instead of drifting with viewport height. */
+  bottom: 12.5%;
+  width: 15%;
   aspect-ratio: 1;
   border: clamp(2px, .45vh, 4px) solid rgba(255, 210, 30, 0.96);
   border-radius: 50%;
@@ -644,8 +647,8 @@ body {
   animation: intro-wheel-spin .34s linear infinite;
 }
 
-.runner-bike-wheel--rear { left: 13.5%; }
-.runner-bike-wheel--front { right: 12.9%; }
+.runner-bike-wheel--rear { left: 16.7%; }
+.runner-bike-wheel--front { right: 10.8%; }
 
 .runner-sprite {
   bottom: 0;

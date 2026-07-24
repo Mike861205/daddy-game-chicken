@@ -196,6 +196,16 @@ El script: entra al proyecto, hace `git pull origin main`, `npm ci`, genera
 Prisma Client, aplica migraciones de producción, compila y reinicia la API con
 PM2, mostrando el estado final.
 
+Cada ejecución también genera una versión PWA única, comprueba que el service
+worker, el manifest y los iconos estén presentes, y hace que los dispositivos
+instalados consulten `/sw.js` sin reutilizar la caché HTTP. Las cachés de la
+versión anterior se eliminan automáticamente cuando se activa la nueva. No es
+necesario desinstalar la PWA después de un despliegue.
+
+El script no sobrescribe automáticamente el archivo completo de Nginx: Certbot
+puede haber agregado ahí la configuración HTTPS. La versión PWA incluida en
+cada build evita depender de esa sobrescritura y conserva los certificados.
+
 ## 13. Restaurar una versión anterior
 
 ```bash

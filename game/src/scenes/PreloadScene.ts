@@ -27,7 +27,7 @@ export class PreloadScene extends Phaser.Scene {
     });
 
     const imageBase = 'assets/images';
-    const assetVersion = 'combat-bike-20260723';
+    const assetVersion = 'world-generals-20260724';
     this.load.spritesheet(
       'daddy-pollo-anim',
       `${imageBase}/daddy-pollo-anim.png?v=${assetVersion}`,
@@ -65,6 +65,10 @@ export class PreloadScene extends Phaser.Scene {
     for (const key of EXTRA_IMAGE_KEYS) {
       this.load.image(key, `${imageBase}/${key}.png?v=${assetVersion}`);
     }
+    this.load.image(
+      'daddy-pollo-pwa',
+      'assets/icons/daddy-pollo-pwa.png?v=pwa-icon-20260724',
+    );
   }
 
   async create(): Promise<void> {

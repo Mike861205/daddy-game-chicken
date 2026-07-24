@@ -56,11 +56,15 @@ export class CombatBike {
       .setDisplaySize(304, 178)
       .setOrigin(0.5, 1);
     const logo = this.scene.add
-      .image(90, -114, 'logo-daddy-game-chicken')
-      .setDisplaySize(54, 24)
+      // Exact centre of the usable blue panel in the cargo box.
+      .image(99, -112, 'logo-daddy-game-chicken')
+      .setDisplaySize(48, 22)
       .setOrigin(0.5);
-    const frontWheel = this.createWheel(-92, -36);
-    const rearWheel = this.createWheel(89, -36);
+    // Hub coordinates measured from the 1160 × 680 source artwork after it is
+    // scaled to 304 × 178. Keeping them in the visual layer also makes the
+    // alignment survive direction mirroring and responsive canvas scaling.
+    const frontWheel = this.createWheel(-96, -41);
+    const rearWheel = this.createWheel(78, -41);
     visualLayer.add([bike, logo, frontWheel, rearWheel]);
 
     const armorBg = this.scene.add

@@ -11,6 +11,10 @@ import {
 import type { RegistrationData } from '../services/registrationForm.js';
 import { api } from '../services/api.js';
 import type { PublicConfig } from '../types.js';
+import { buildWhatsAppUrl } from '../utils/whatsapp.js';
+import { pwaManager } from '../services/pwa.js';
+
+const FOOD_ORDER_MESSAGE = 'Quiero pedir de comer a Daddy Pollo, ¿me regalas el menú?';
 
 /**
  * MenuScene: logo, main buttons, sound toggle and player registration.
@@ -106,12 +110,20 @@ export class MenuScene extends Phaser.Scene {
       fontSize: 28,
       glowColor: 0x43d9ff,
     });
+    createButton(this, cx, 965, 'DESCARGA LA APP', () => this.openInstallModule(), {
+      width: 500,
+      height: 70,
+      fontSize: 27,
+      fillColor: 0x6f46d9,
+      textColor: '#ffffff',
+      glowColor: 0xb66cff,
+    });
 
     // Sound toggle.
-    this.createSoundToggle(cx, 978);
+    this.createSoundToggle(cx, 1055);
 
     const arsenalBadge = this.add
-      .text(cx, 1060, '⚔ NUEVO COMBATE: CORRE • DISPARA • CÚBRETE', {
+      .text(cx, 1132, '⚔ NUEVO COMBATE: CORRE • DISPARA • CÚBRETE', {
         fontFamily: 'Trebuchet MS, Arial, sans-serif',
         fontSize: '17px',
         fontStyle: 'bold',
@@ -130,21 +142,178 @@ export class MenuScene extends Phaser.Scene {
       repeat: -1,
     });
 
-    // Business contact footer.
+    // Business contact footer. The WhatsApp action lives only on this menu.
     const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
     const phone = config?.contact.businessPhone ?? '6241548148';
     this.add
-      .text(cx, GAME_HEIGHT - 52, `DADDY POLLO  •  TEL. ${phone}`, {
+      .text(185, GAME_HEIGHT - 68, `DADDY POLLO\nTEL. ${phone}`, {
         fontFamily: 'Trebuchet MS, Arial, sans-serif',
-        fontSize: '18px',
+        fontSize: '19px',
         fontStyle: 'bold',
         color: '#9fdcff',
         stroke: '#06143a',
         strokeThickness: 4,
         letterSpacing: 1,
+        align: 'center',
       })
       .setOrigin(0.5)
       .setAlpha(0.85);
+    this.createWhatsAppOrderButton(505, GAME_HEIGHT - 68, phone);
+  }
+
+  private openInstallModule(): void {
+    this.scene.start(SCENES.Install);
+    // This call remains inside the menu-button gesture. Chromium requires that
+    // user activation in order to display its native PWA installer.
+    void pwaManager.promptInstall();
+  }
+
+  private createWhatsAppOrderButton(x: number, y: number, phone: string): void {
+    const width = 292;
+    const height = 68;
+    const whatsappGreen = 0x25d366;
+    const wrapper = this.add.container(x, y);
+    const button = this.add.container(0, 0);
+    const glow = this.add.graphics();
+    const background = this.add.graphics();
+
+    type ButtonState = 'normal' | 'hover' | 'pressed';
+    const drawButton = (state: ButtonState): void => {
+      const hovered = state === 'hover';
+      const pressed = state === 'pressed';
+      const inset = pressed ? 2 : 0;
+
+      glow.clear();
+      background.clear();
+      glow.fillStyle(whatsappGreen, hovered ? 0.32 : 0.2);
+      glow.fillRoundedRect(-width / 2 - 8, -height / 2 - 8, width + 16, height + 16, 28);
+      glow.lineStyle(hovered ? 8 : 5, whatsappGreen, hovered ? 0.35 : 0.2);
+      glow.strokeRoundedRect(-width / 2 - 3, -height / 2 - 3, width + 6, height + 6, 25);
+
+      background.fillStyle(0x020817, 0.5);
+      background.fillRoundedRect(-width / 2 + 4, -height / 2 + 7, width, height, 23);
+      background.fillStyle(whatsappGreen, 1);
+      background.fillRoundedRect(
+        -width / 2 + inset,
+        -height / 2 + inset,
+        width - inset * 2,
+        height - inset * 2,
+        22,
+      );
+      background.lineStyle(hovered ? 4 : 3, 0xffffff, hovered ? 1 : 0.9);
+      background.strokeRoundedRect(
+        -width / 2 + inset,
+        -height / 2 + inset,
+        width - inset * 2,
+        height - inset * 2,
+        22,
+      );
+      background.fillStyle(0xffffff, hovered ? 0.2 : 0.13);
+      background.fillRoundedRect(-width / 2 + 8, -height / 2 + 7, width - 16, 18, 10);
+    };
+    drawButton('normal');
+
+    // Code-native WhatsApp-style mark: speech bubble plus handset.
+    const icon = this.add.graphics();
+    icon.fillStyle(0xffffff, 1);
+    icon.fillCircle(-108, 0, 21);
+    icon.fillTriangle(-121, 14, -127, 24, -113, 19);
+    icon.fillStyle(whatsappGreen, 1);
+    icon.fillCircle(-108, 0, 16);
+    const handset = this.add
+      .text(-108, -1, '☎', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '22px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+      })
+      .setOrigin(0.5);
+    const channelLabel = this.add
+      .text(20, -14, 'WHATSAPP', {
+        fontFamily: 'Trebuchet MS, Arial, sans-serif',
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#dfffea',
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5);
+    const actionLabel = this.add
+      .text(20, 9, 'PEDIR DE COMER', {
+        fontFamily: 'Impact, Haettenschweiler, "Arial Black", sans-serif',
+        fontSize: '23px',
+        color: '#ffffff',
+        stroke: '#075c2a',
+        strokeThickness: 2,
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5)
+      .setShadow(0, 0, '#ffffff', 5, true, true);
+    const hitZone = this.add
+      .zone(0, 0, width + 18, height + 12)
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+
+    button.add([glow, background, icon, handset, channelLabel, actionLabel, hitZone]);
+    button.setSize(width, height);
+    wrapper.add(button);
+
+    const animateScale = (scale: number, duration: number): void => {
+      this.tweens.killTweensOf(button);
+      this.tweens.add({ targets: button, scale, duration, ease: 'Quad.out' });
+    };
+    let activePointerId: number | null = null;
+
+    hitZone.on('pointerover', () => {
+      drawButton('hover');
+      animateScale(1.025, 100);
+    });
+    hitZone.on('pointerout', () => {
+      drawButton('normal');
+      animateScale(1, 110);
+    });
+    hitZone.on('pointerdown', (pointer: Phaser.Input.Pointer) => {
+      if (activePointerId !== null) {
+        return;
+      }
+      activePointerId = pointer.id;
+      drawButton('pressed');
+      animateScale(0.97, 55);
+    });
+    hitZone.on('pointerup', (pointer: Phaser.Input.Pointer) => {
+      if (activePointerId !== pointer.id) {
+        return;
+      }
+      activePointerId = null;
+      drawButton('hover');
+      animateScale(1.025, 80);
+      audioManager.unlock();
+      audioManager.play('click');
+      window.open(buildWhatsAppUrl(phone, FOOD_ORDER_MESSAGE), '_blank', 'noopener');
+    });
+    hitZone.on('pointerupoutside', (pointer: Phaser.Input.Pointer) => {
+      if (activePointerId === pointer.id) {
+        activePointerId = null;
+        drawButton('normal');
+        animateScale(1, 80);
+      }
+    });
+
+    this.tweens.add({
+      targets: wrapper,
+      y: { from: y - 3, to: y + 3 },
+      duration: 1100,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.72, to: 1 },
+      duration: 850,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
   }
 
   private createSoundToggle(x: number, y: number): void {

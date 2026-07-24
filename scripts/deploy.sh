@@ -38,9 +38,27 @@ npm run prisma:generate
 echo "==> Applying database migrations (deploy)"
 npm run prisma:migrate:deploy
 
-# 6. Build backend and frontend.
-echo "==> Building server and game"
-npm run build
+# 6. Build backend and frontend. Every production build receives a unique PWA
+# version. The installed app registers /sw.js with this version in its query
+# string, bypasses the HTTP cache and removes caches from older deployments.
+PWA_VERSION="$(git rev-parse --short HEAD)-$(date -u +%Y%m%d%H%M%S)"
+echo "==> Building server and game (PWA $PWA_VERSION)"
+PWA_VERSION="$PWA_VERSION" npm run build
+
+# Fail before restarting services if any required installable-app artifact is
+# missing from the production build.
+for pwa_artifact in \
+  game/dist/sw.js \
+  game/dist/manifest.webmanifest \
+  game/dist/assets/icons/daddy-pollo-pwa-192.png \
+  game/dist/assets/icons/daddy-pollo-pwa-512.png
+do
+  if [ ! -s "$pwa_artifact" ]; then
+    echo "ERROR: Missing PWA artifact: $pwa_artifact" >&2
+    exit 1
+  fi
+done
+echo "==> PWA artifacts verified"
 
 # 7. Restart (or start) the API with PM2.
 echo "==> Restarting API with PM2"

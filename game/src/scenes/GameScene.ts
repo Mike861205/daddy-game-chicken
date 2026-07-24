@@ -17,7 +17,12 @@ import {
   type PowerType,
   type WeaponType,
 } from '../config/items.js';
-import { ENEMIES, ENEMY_ORDER, type EnemyType } from '../config/enemies.js';
+import { ENEMIES, getEnemyPoolForWorld, type EnemyType } from '../config/enemies.js';
+import {
+  GENERAL_TRIGGER_PROGRESS,
+  getGeneralForWorld,
+  type GeneralDefinition,
+} from '../config/generals.js';
 import { WEAPONS } from '../config/weapons.js';
 import { WORLDS, type WorldDefinition } from '../config/worlds.js';
 import { Boss } from '../objects/Boss.js';
@@ -48,6 +53,8 @@ interface BossProjectileOptions {
   originX?: number;
   originY?: number;
   angularVelocity?: number;
+  baseSpeed?: number;
+  attackerName?: string;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -59,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private bossProjectiles!: Phaser.Physics.Arcade.Group;
   private boss!: Boss;
   private secondaryBoss!: Boss;
+  private general!: Boss;
   private combatBike!: CombatBike;
   private config!: PublicConfig;
 
@@ -71,12 +79,15 @@ export class GameScene extends Phaser.Scene {
   private paused = false;
   private gameOver = false;
   private bossActive = false;
+  private generalActive = false;
   private worldTransitioning = false;
   private currentWorldIndex = 0;
   private worldPaceStage = 0;
   private campaignElapsedSeconds = 0;
   private bossProjectileIndex = 0;
   private bossAttackSequence = 0;
+  private currentGeneral?: GeneralDefinition;
+  private readonly defeatedGeneralWorlds = new Set<number>();
 
   private baseFallSpeed = 220;
   private spawnDelay = 850;
@@ -201,12 +212,15 @@ export class GameScene extends Phaser.Scene {
     this.paused = false;
     this.gameOver = false;
     this.bossActive = false;
+    this.generalActive = false;
     this.worldTransitioning = false;
     this.currentWorldIndex = 0;
     this.worldPaceStage = 0;
     this.campaignElapsedSeconds = 0;
     this.bossProjectileIndex = 0;
     this.bossAttackSequence = 0;
+    this.currentGeneral = undefined;
+    this.defeatedGeneralWorlds.clear();
     this.activePowers.clear();
     this.activeWeapon = null;
     this.weaponAmmo = 0;
@@ -270,6 +284,25 @@ export class GameScene extends Phaser.Scene {
     this.spawnDelay = Math.max(
       420,
       Math.round(850 * (1 - 0.24 * offset) * (1 - worldBoost * 0.5 - stageBoost * 0.55)),
+    );
+    const baseEnemySpawnDelay = 9000 * (1 - 0.35 * offset);
+    this.enemySpawnDelay = Math.max(
+      4300,
+      Math.round(baseEnemySpawnDelay * (1 - worldBoost * 0.28 - stageBoost * 0.18)),
+    );
+    this.firstEnemyDelay = Math.max(
+      2500,
+      Math.round(
+        4800 *
+        (1 - 0.25 * offset) *
+        (1 - worldBoost * 0.2 - stageBoost * 0.12),
+      ),
+    );
+    const difficultyEnemyLimit =
+      this.difficultyLevel <= 2 ? 1 : this.difficultyLevel >= 8 ? 3 : 2;
+    this.maxActiveEnemies = Math.min(
+      3,
+      difficultyEnemyLimit + (this.currentWorldIndex >= 4 ? 1 : 0),
     );
   }
 
@@ -433,6 +466,102 @@ export class GameScene extends Phaser.Scene {
       ice.destroy();
     }
 
+    if (!this.textures.exists('ataque-metralla')) {
+      const bullet = this.make.graphics({ x: 0, y: 0 }, false);
+      bullet.fillStyle(0xffd45c, 0.28);
+      bullet.fillRoundedRect(0, 6, 58, 10, 5);
+      bullet.fillStyle(0xfff4b0, 1);
+      bullet.fillRoundedRect(19, 7, 42, 8, 4);
+      bullet.fillStyle(0xff8b2b, 1);
+      bullet.fillTriangle(61, 7, 68, 11, 61, 15);
+      bullet.generateTexture('ataque-metralla', 68, 22);
+      bullet.destroy();
+    }
+
+    if (!this.textures.exists('ataque-flecha')) {
+      const arrow = this.make.graphics({ x: 0, y: 0 }, false);
+      arrow.fillStyle(0x43f4d2, 0.24);
+      arrow.fillRoundedRect(0, 7, 64, 10, 5);
+      arrow.fillStyle(0xffd86a, 1);
+      arrow.fillRoundedRect(12, 10, 54, 4, 2);
+      arrow.fillStyle(0x56e6cf, 1);
+      arrow.fillTriangle(0, 4, 15, 12, 0, 20);
+      arrow.fillStyle(0xfff2a6, 1);
+      arrow.fillTriangle(58, 3, 76, 12, 58, 21);
+      arrow.generateTexture('ataque-flecha', 76, 24);
+      arrow.destroy();
+    }
+
+    if (!this.textures.exists('ataque-divino')) {
+      const divine = this.make.graphics({ x: 0, y: 0 }, false);
+      divine.fillStyle(0xd274ff, 0.25);
+      divine.fillCircle(28, 28, 28);
+      divine.lineStyle(4, 0xffd86a, 0.95);
+      divine.strokeCircle(28, 28, 20);
+      divine.lineStyle(3, 0xf5dcff, 0.9);
+      divine.strokeCircle(28, 28, 12);
+      divine.fillStyle(0xffffff, 1);
+      divine.fillCircle(28, 28, 7);
+      divine.fillStyle(0xffe982, 1);
+      divine.fillTriangle(28, 1, 33, 18, 23, 18);
+      divine.fillTriangle(28, 55, 23, 38, 33, 38);
+      divine.generateTexture('ataque-divino', 56, 56);
+      divine.destroy();
+    }
+
+    if (!this.textures.exists('ataque-cadena')) {
+      const chainShot = this.make.graphics({ x: 0, y: 0 }, false);
+      chainShot.fillStyle(0x60c8ff, 0.25);
+      chainShot.fillCircle(36, 28, 26);
+      chainShot.fillStyle(0x17233b, 1);
+      chainShot.fillCircle(39, 28, 16);
+      chainShot.lineStyle(4, 0xffd16a, 1);
+      chainShot.strokeCircle(39, 28, 17);
+      chainShot.lineStyle(5, 0xc8d8e8, 1);
+      chainShot.lineBetween(2, 18, 25, 24);
+      chainShot.lineBetween(2, 36, 25, 30);
+      chainShot.fillStyle(0xffffff, 0.9);
+      chainShot.fillCircle(34, 23, 5);
+      chainShot.generateTexture('ataque-cadena', 64, 56);
+      chainShot.destroy();
+    }
+
+    if (!this.textures.exists('ataque-toxico-general')) {
+      const toxic = this.make.graphics({ x: 0, y: 0 }, false);
+      toxic.fillStyle(0x9cff3d, 0.24);
+      toxic.fillCircle(31, 31, 30);
+      toxic.fillStyle(0x365d16, 1);
+      toxic.fillCircle(31, 31, 21);
+      toxic.lineStyle(4, 0xcfff72, 1);
+      toxic.strokeCircle(31, 31, 22);
+      toxic.fillStyle(0xe9ffb0, 1);
+      toxic.fillCircle(24, 23, 7);
+      toxic.fillCircle(40, 34, 5);
+      toxic.fillStyle(0x17210f, 0.85);
+      toxic.fillCircle(30, 40, 4);
+      toxic.generateTexture('ataque-toxico-general', 62, 62);
+      toxic.destroy();
+    }
+
+    if (!this.textures.exists('ataque-cosmico-general')) {
+      const cosmic = this.make.graphics({ x: 0, y: 0 }, false);
+      cosmic.fillStyle(0xc968ff, 0.24);
+      cosmic.fillCircle(32, 32, 31);
+      cosmic.lineStyle(4, 0x63e8ff, 0.95);
+      cosmic.strokeCircle(32, 32, 24);
+      cosmic.lineStyle(3, 0xf0c4ff, 0.9);
+      cosmic.strokeCircle(32, 32, 15);
+      cosmic.fillStyle(0x7d2fd6, 1);
+      cosmic.fillCircle(32, 32, 13);
+      cosmic.fillStyle(0xffffff, 1);
+      cosmic.fillCircle(28, 27, 6);
+      cosmic.fillStyle(0x77f4ff, 0.95);
+      cosmic.fillTriangle(32, 0, 37, 18, 27, 18);
+      cosmic.fillTriangle(32, 64, 27, 46, 37, 46);
+      cosmic.generateTexture('ataque-cosmico-general', 64, 64);
+      cosmic.destroy();
+    }
+
     if (!this.textures.exists('ataque-atomico')) {
       const bomb = this.make.graphics({ x: 0, y: 0 }, false);
       bomb.fillStyle(0x1c2438, 1);
@@ -537,7 +666,7 @@ export class GameScene extends Phaser.Scene {
       runChildUpdate: false,
     });
     this.enemyProjectiles = this.physics.add.group({
-      maxSize: 40,
+      maxSize: 64,
       runChildUpdate: false,
     });
 
@@ -572,6 +701,7 @@ export class GameScene extends Phaser.Scene {
   private createBossSystem(): void {
     this.boss = new Boss(this, GAME_WIDTH / 2, -180);
     this.secondaryBoss = new Boss(this, GAME_WIDTH / 2, -180);
+    this.general = new Boss(this, GAME_WIDTH / 2, -180);
     this.bossProjectiles = this.physics.add.group({
       maxSize: 140,
       runChildUpdate: false,
@@ -1151,6 +1281,23 @@ export class GameScene extends Phaser.Scene {
       return true;
     });
 
+    if (this.generalActive && this.general.active) {
+      try {
+        const generalUpdate = this.general.updateBoss(
+          this.time.now,
+          this.difficultySpeedMultiplier,
+          delta,
+          this.player.x,
+        );
+        if (generalUpdate.shouldAttack) {
+          this.spawnGeneralAttack(generalUpdate.phase);
+        }
+      } catch (error) {
+        console.error('Se recuperó el ciclo de combate del general.', error);
+        this.cameras.main.resetFX();
+      }
+    }
+
     if (this.bossActive) {
       try {
         const encounterBosses = this.getEncounterBosses();
@@ -1162,6 +1309,7 @@ export class GameScene extends Phaser.Scene {
             this.time.now,
             this.difficultySpeedMultiplier,
             delta,
+            this.player.x,
           );
           if (bossUpdate.shouldAttack) {
             this.spawnBossAttack(bossUpdate.phase, encounterBoss, index);
@@ -1193,6 +1341,14 @@ export class GameScene extends Phaser.Scene {
       // Boss hits are resolved manually instead of from an Arcade overlap
       // callback. This keeps damage deterministic and prevents a callback
       // exception from aborting Phaser's physics step on mobile browsers.
+      if (
+        this.generalActive &&
+        this.general.active &&
+        this.projectileTouchesBoss(projectile, this.general)
+      ) {
+        this.onProjectileHitGeneral(projectile);
+        return true;
+      }
       const hitBoss = this.bossActive
         ? this.getEncounterBosses().find(
           (encounterBoss) =>
@@ -1291,6 +1447,10 @@ export class GameScene extends Phaser.Scene {
       this.timeText.setText('JEFE').setColor(this.currentWorld.colorHex);
       return;
     }
+    if (this.generalActive) {
+      this.timeText.setText('GENERAL').setColor(this.currentGeneral?.colorHex ?? COLORS_HEX.yellow);
+      return;
+    }
     if (this.worldTransitioning) {
       return;
     }
@@ -1315,13 +1475,176 @@ export class GameScene extends Phaser.Scene {
       this.startWorldTimers();
     }
 
+    if (this.shouldStartGeneralBattle(worldDuration)) {
+      this.startGeneralBattle();
+      return;
+    }
+
     if (this.timeLeft <= 0) {
       this.startBossBattle();
     }
   }
 
+  private shouldStartGeneralBattle(worldDuration: number): boolean {
+    const definition = getGeneralForWorld(this.currentWorld.id);
+    if (
+      !definition ||
+      this.generalActive ||
+      this.defeatedGeneralWorlds.has(this.currentWorld.id)
+    ) {
+      return false;
+    }
+    const elapsedRatio = 1 - Math.max(0, this.timeLeft) / Math.max(1, worldDuration);
+    return elapsedRatio >= GENERAL_TRIGGER_PROGRESS;
+  }
+
+  private createGeneralBossDefinition(definition: GeneralDefinition): WorldDefinition {
+    return {
+      id: this.currentWorld.id,
+      name: this.currentWorld.name,
+      subtitle: definition.title,
+      backgroundKey: this.currentWorld.backgroundKey,
+      bossName: definition.name,
+      bossTexture: definition.textureKey,
+      bossHealth: definition.health,
+      bossPoints: definition.points,
+      bossPattern: 'standard',
+      color: definition.color,
+      colorHex: definition.colorHex,
+      projectileTexture: definition.projectileTexture,
+      attackIntervalMs: definition.attackIntervalMs,
+      projectileSpeed: definition.projectileSpeed,
+    };
+  }
+
+  private startGeneralBattle(): void {
+    const definition = getGeneralForWorld(this.currentWorld.id);
+    if (
+      !definition ||
+      this.generalActive ||
+      this.bossActive ||
+      this.worldTransitioning ||
+      this.gameOver ||
+      this.defeatedGeneralWorlds.has(this.currentWorld.id)
+    ) {
+      return;
+    }
+
+    this.worldTransitioning = true;
+    this.stopWorldTimers();
+    this.currentGeneral = definition;
+    if (this.physics.world.isPaused) {
+      this.physics.resume();
+    }
+
+    this.enemies.children.each((child) => {
+      const enemy = child as Enemy;
+      if (enemy.active) {
+        enemy.recycle();
+      }
+      return true;
+    });
+    this.enemyProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) {
+        this.recycleEnemyProjectile(projectile);
+      }
+      return true;
+    });
+    this.bossProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) {
+        this.recycleEnemyProjectile(projectile);
+      }
+      return true;
+    });
+
+    this.timeText.setText('GENERAL').setColor(definition.colorHex);
+    this.comboText.setVisible(false);
+    this.powerText.setVisible(false);
+    this.bossNameText
+      .setText(`⚔ ${definition.title.toUpperCase()} · ${definition.name.toUpperCase()} ⚔  •  VIDA 100%`)
+      .setColor(definition.colorHex)
+      .setVisible(true);
+    this.bossHealthBg.setVisible(true);
+    this.bossHealthFill
+      .setFillStyle(definition.color, 1)
+      .setScale(1, 1)
+      .setVisible(true);
+
+    if (this.activeWeapon) {
+      this.weaponAmmo = Math.max(this.weaponAmmo, WEAPONS[this.activeWeapon].ammo);
+    } else {
+      this.equipStartingWeapon();
+    }
+    this.updateHud();
+
+    try {
+      this.general.spawn(
+        this.createGeneralBossDefinition(definition),
+        this.time.now,
+        this.difficultyLevel,
+        {
+          texture: definition.textureKey,
+          startX: GAME_WIDTH / 2,
+          baseY: definition.baseY,
+          direction: -1,
+          displayWidth: definition.displayWidth,
+          displayHeight: definition.displayHeight,
+          patrolMinX: 190,
+          patrolMaxX: GAME_WIDTH - 190,
+        },
+      );
+    } catch (error) {
+      console.error('No se pudo iniciar el general; se reintentará.', error);
+      this.currentGeneral = undefined;
+      this.worldTransitioning = false;
+      this.timeLeft += 3;
+      this.timeText.setText(String(this.timeLeft)).setColor(COLORS_HEX.yellow);
+      this.bossNameText.setVisible(false);
+      this.bossHealthBg.setVisible(false);
+      this.bossHealthFill.setVisible(false);
+      this.comboText.setVisible(true);
+      this.powerText.setVisible(true);
+      this.startWorldTimers();
+      return;
+    }
+
+    this.generalActive = true;
+    this.worldTransitioning = false;
+    this.cameras.main.resetFX();
+    this.cameras.main.shake(320, 0.011);
+    audioManager.play('blast');
+
+    const warning = this.add
+      .text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2,
+        `¡GENERAL EN COMBATE!\n${definition.name}`,
+        {
+          fontFamily: 'Arial Black',
+          fontSize: '54px',
+          color: definition.colorHex,
+          stroke: '#020718',
+          strokeThickness: 10,
+          align: 'center',
+        },
+      )
+      .setOrigin(0.5)
+      .setDepth(70);
+    this.tweens.add({
+      targets: warning,
+      scale: { from: 0.68, to: 1.05 },
+      alpha: { from: 1, to: 0 },
+      duration: 950,
+      hold: 300,
+      ease: 'Back.out',
+      onComplete: () => warning.destroy(),
+    });
+  }
+
   private startBossBattle(): void {
-    if (this.bossActive || this.worldTransitioning || this.gameOver) {
+    if (this.bossActive || this.generalActive || this.worldTransitioning || this.gameOver) {
       return;
     }
     this.worldTransitioning = true;
@@ -1436,6 +1759,113 @@ export class GameScene extends Phaser.Scene {
       : [this.boss];
   }
 
+  private spawnGeneralAttack(phase: number): void {
+    const definition = this.currentGeneral;
+    if (!definition || !this.general.active || !this.generalActive) {
+      return;
+    }
+
+    this.general.playAttackMotion(this.time.now);
+    const playerVelocityX = (this.player.body as Phaser.Physics.Arcade.Body).velocity.x;
+    const generalMuzzle = this.general.getMuzzlePosition(0);
+    const baseAngle = Phaser.Math.Angle.Between(
+      generalMuzzle.x,
+      generalMuzzle.y,
+      this.player.x + playerVelocityX * 0.16,
+      this.player.y - 42,
+    );
+
+    const launchVolley = (
+      count: number,
+      spread: number,
+      textureForIndex: (index: number) => string,
+      kind: string,
+      displayWidth: number,
+      displayHeight: number,
+      speedMultiplier: number,
+      curveAmount: number,
+      angularVelocity: number,
+    ): void => {
+      for (let index = 0; index < count; index += 1) {
+        const offset = count === 1
+          ? 0
+          : Phaser.Math.Linear(-spread / 2, spread / 2, index / (count - 1));
+        this.spawnBossProjectile(baseAngle + offset, phase, index, this.general, 0, {
+          texture: textureForIndex(index),
+          kind,
+          displayWidth,
+          displayHeight,
+          speedMultiplier,
+          curve: index % 2 === 0 ? curveAmount : -curveAmount,
+          useMaliciousIcon: false,
+          angularVelocity: index % 2 === 0 ? angularVelocity : -angularVelocity,
+          baseSpeed: definition.projectileSpeed,
+          attackerName: definition.name,
+        });
+      }
+    };
+
+    switch (definition.pattern) {
+      case 'stormBarrage':
+        launchVolley(
+          2 + phase,
+          0.45 + phase * 0.08,
+          () => definition.projectileTexture,
+          'general-chain-shot',
+          52,
+          46,
+          1,
+          22 + phase * 5,
+          190,
+        );
+        break;
+      case 'toxicMortar':
+        launchVolley(
+          2 + phase,
+          0.58 + phase * 0.07,
+          () => definition.projectileTexture,
+          'general-toxic-mortar',
+          58,
+          58,
+          0.86,
+          38 + phase * 6,
+          115,
+        );
+        break;
+      case 'elementalCrossfire':
+        launchVolley(
+          2 + phase,
+          0.62 + phase * 0.09,
+          (index) =>
+            index % 2 === 0
+              ? definition.projectileTexture
+              : definition.secondaryProjectileTexture ?? 'ataque-hielo',
+          'general-elemental-shot',
+          48,
+          48,
+          1.03,
+          30 + phase * 7,
+          150,
+        );
+        break;
+      case 'cosmicAssault':
+        launchVolley(
+          3 + phase,
+          0.82 + phase * 0.1,
+          () => definition.projectileTexture,
+          'general-cosmic-orb',
+          54,
+          54,
+          1.06,
+          52 + phase * 8,
+          235,
+        );
+        break;
+    }
+
+    this.finishBossAttackMotion(this.general, definition.color);
+  }
+
   private spawnBossAttack(phase: number, attacker: Boss, bossIndex: number): void {
     const pattern = this.currentWorld.bossPattern ?? 'standard';
     if (pattern === 'atomic-aircraft') {
@@ -1453,9 +1883,10 @@ export class GameScene extends Phaser.Scene {
     const count = pattern === 'dual-elemental'
       ? Math.min(6, 2 + phase + difficultyProjectiles)
       : Math.min(9, 1 + world.id + difficultyProjectiles + (phase >= 2 ? 1 : 0));
+    const muzzlePosition = attacker.getMuzzlePosition(0);
     const baseAngle = Phaser.Math.Angle.Between(
-      attacker.x,
-      attacker.y + 35,
+      muzzlePosition.x,
+      muzzlePosition.y,
       this.player.x,
       this.player.y - 45,
     );
@@ -1489,9 +1920,10 @@ export class GameScene extends Phaser.Scene {
     const launchBombs = this.bossAttackSequence % 2 === 0;
     this.bossAttackSequence += 1;
     const count = launchBombs ? 3 + (phase >= 3 ? 1 : 0) : 4 + phase;
+    const muzzlePosition = attacker.getMuzzlePosition(0);
     const baseAngle = Phaser.Math.Angle.Between(
-      attacker.x,
-      attacker.y + 55,
+      muzzlePosition.x,
+      muzzlePosition.y,
       this.player.x,
       this.player.y - 25,
     );
@@ -1522,9 +1954,10 @@ export class GameScene extends Phaser.Scene {
 
   private spawnAlienCarrierAttack(phase: number, attacker: Boss): void {
     attacker.playAttackMotion(this.time.now);
+    const muzzlePosition = attacker.getMuzzlePosition(0);
     const baseAngle = Phaser.Math.Angle.Between(
-      attacker.x,
-      attacker.y + 50,
+      muzzlePosition.x,
+      muzzlePosition.y,
       this.player.x,
       this.player.y - 35,
     );
@@ -1582,8 +2015,9 @@ export class GameScene extends Phaser.Scene {
       ? BAD_ITEMS[(this.bossProjectileIndex + patternIndex) % BAD_ITEMS.length].key
       : options.texture ?? world.projectileTexture;
     this.bossProjectileIndex += 1;
-    const originX = options.originX ?? attacker.x;
-    const originY = options.originY ?? attacker.y + 60;
+    const muzzlePosition = attacker.getMuzzlePosition(patternIndex);
+    const originX = options.originX ?? muzzlePosition.x;
+    const originY = options.originY ?? muzzlePosition.y;
     const projectile = this.bossProjectiles.get(originX, originY, texture) as
       | Phaser.Physics.Arcade.Image
       | null;
@@ -1594,9 +2028,11 @@ export class GameScene extends Phaser.Scene {
     const size = options.size ?? (useMaliciousIcon ? 48 + world.id * 2 : 42 + world.id * 2);
     const displayWidth = options.displayWidth ?? size;
     const displayHeight = options.displayHeight ?? size;
-    const bossName = bossIndex === 1
-      ? world.secondaryBossName ?? world.bossName
-      : world.bossName;
+    const bossName = options.attackerName ?? (
+      bossIndex === 1
+        ? world.secondaryBossName ?? world.bossName
+        : world.bossName
+    );
     projectile
       .setTexture(texture)
       .setActive(true)
@@ -1619,7 +2055,7 @@ export class GameScene extends Phaser.Scene {
     body.setAllowGravity(false);
     body.setCircle(projectile.width * 0.37);
     const speed =
-      world.projectileSpeed *
+      (options.baseSpeed ?? world.projectileSpeed) *
       this.difficultySpeedMultiplier *
       (1 + (phase - 1) * 0.1) *
       (options.speedMultiplier ?? 1);
@@ -1633,7 +2069,8 @@ export class GameScene extends Phaser.Scene {
 
   private finishBossAttackMotion(attacker: Boss, color: number): void {
     try {
-      this.emitMuzzleFlash(attacker.x, attacker.y + 60, color);
+      const muzzlePosition = attacker.getMuzzlePosition(this.bossProjectileIndex);
+      this.emitMuzzleFlash(muzzlePosition.x, muzzlePosition.y, color);
       this.tweens.add({
         targets: attacker,
         scaleX: attacker.scaleX * 1.08,
@@ -1689,6 +2126,122 @@ export class GameScene extends Phaser.Scene {
     this.emitSparkle(x, y, color);
     this.cameras.main.shake(radius > 150 ? 280 : 170, radius > 150 ? 0.014 : 0.009);
     audioManager.play('blast');
+  }
+
+  private onProjectileHitGeneral(projectile: Phaser.Physics.Arcade.Image): void {
+    if (!projectile.active || !this.general.active || !this.generalActive) {
+      return;
+    }
+    const weaponType = projectile.getData('weapon') as WeaponType;
+    const weapon = WEAPONS[weaponType];
+    if (!weapon) {
+      console.error('Se descartó un disparo sin tipo de arma válido contra el general.');
+      this.recycleProjectile(projectile);
+      return;
+    }
+
+    const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
+    const hitX = projectile.x;
+    const hitY = projectile.y;
+    this.recycleProjectile(projectile);
+    const defeated = this.general.takeHit(damage);
+    this.updateGeneralHealthHud();
+
+    try {
+      this.emitSparkle(hitX, hitY, weapon.color);
+      audioManager.play('shot');
+    } catch (error) {
+      console.error('Se omitió un efecto visual de daño al general.', error);
+    }
+    if (defeated) {
+      this.defeatGeneral();
+    }
+  }
+
+  private updateGeneralHealthHud(): void {
+    const definition = this.currentGeneral;
+    if (!definition) {
+      return;
+    }
+    const remainingPercent = Math.max(0, Math.ceil(this.general.healthRatio * 100));
+    this.bossHealthFill.setScale(this.general.healthRatio, 1);
+    this.bossNameText.setText(
+      `⚔ ${definition.title.toUpperCase()} · ${definition.name.toUpperCase()} ⚔  •  VIDA ${remainingPercent}%`,
+    );
+  }
+
+  private defeatGeneral(): void {
+    const definition = this.currentGeneral;
+    if (!definition || !this.generalActive) {
+      return;
+    }
+
+    this.generalActive = false;
+    this.worldTransitioning = true;
+    this.defeatedGeneralWorlds.add(this.currentWorld.id);
+    const effectX = this.general.x;
+    const effectY = this.general.y;
+    const body = this.general.body as Phaser.Physics.Arcade.Body | null;
+    if (body) {
+      body.enable = false;
+      body.setVelocity(0, 0);
+    }
+    this.general.hideAnimatedParts();
+    this.general.setActive(false);
+
+    this.bossProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) {
+        this.recycleEnemyProjectile(projectile);
+      }
+      return true;
+    });
+
+    const awardedPoints = this.adjustPointsForDifficulty(definition.points);
+    this.score += awardedPoints;
+    this.bossHealthFill.setScale(0, 1);
+    this.bossNameText
+      .setText(`¡GENERAL DERROTADO!  •  +${awardedPoints}`)
+      .setColor(COLORS_HEX.yellow);
+    this.updateHud();
+    this.showFloatingText(
+      effectX,
+      effectY,
+      `+${awardedPoints} • ${definition.name.toUpperCase()}`,
+      definition.colorHex,
+    );
+    this.emitShockwave(effectX, effectY, 190, definition.color);
+    this.cameras.main.shake(480, 0.018);
+    audioManager.play('combo');
+
+    this.tweens.add({
+      targets: this.general,
+      y: effectY - 100,
+      alpha: 0,
+      angle: 20,
+      scaleX: this.general.scaleX * 1.25,
+      scaleY: this.general.scaleY * 1.25,
+      duration: 820,
+      ease: 'Cubic.in',
+      onComplete: () => this.general.recycle(),
+    });
+
+    this.time.delayedCall(1350, () => {
+      if (this.gameOver) {
+        return;
+      }
+      this.currentGeneral = undefined;
+      this.bossNameText.setVisible(false);
+      this.bossHealthBg.setVisible(false);
+      this.bossHealthFill.setVisible(false);
+      this.comboText.setVisible(true);
+      this.powerText.setVisible(true);
+      this.timeText.setText(String(this.timeLeft)).setColor(COLORS_HEX.yellow);
+      this.worldTransitioning = false;
+      this.startWorldTimers();
+      this.spawnWeaponPickup();
+      this.updateHud();
+    });
   }
 
   private onProjectileHitBoss(projectile: Phaser.Physics.Arcade.Image, boss: Boss): void {
@@ -1853,6 +2406,7 @@ export class GameScene extends Phaser.Scene {
     this.currentWorldIndex += 1;
     const nextWorld = this.currentWorld;
     this.worldPaceStage = 0;
+    this.nextEnemyIndex = 0;
     this.timeLeft = this.getBossArrivalSeconds();
     this.refreshWorldPace();
     this.transitionWorldBackground(nextWorld);
@@ -2297,26 +2851,30 @@ export class GameScene extends Phaser.Scene {
     if (
       this.paused ||
       this.gameOver ||
+      this.generalActive ||
       (this.bossActive && !bossSupport) ||
       this.worldTransitioning ||
       this.enemies.countActive(true) >= this.maxActiveEnemies
     ) {
       return;
     }
-    const orderIndex = this.nextEnemyIndex % ENEMY_ORDER.length;
-    const type = ENEMY_ORDER[orderIndex];
+    const enemyPool = getEnemyPoolForWorld(this.currentWorld.id);
+    const sequenceIndex = this.nextEnemyIndex;
+    const type = enemyPool[sequenceIndex % enemyPool.length];
     this.nextEnemyIndex += 1;
     const enemy = this.enemies.get() as Enemy | null;
     if (!enemy) {
       return;
     }
 
-    const x = Phaser.Math.Between(105, GAME_WIDTH - 105);
-    const y = bossSupport ? 470 + orderIndex * 105 : 350 + orderIndex * 118;
+    const definition = ENEMIES[type];
+    const horizontalPadding = Math.max(105, Math.ceil(definition.displayWidth * 0.55));
+    const x = Phaser.Math.Between(horizontalPadding, GAME_WIDTH - horizontalPadding);
+    const lanes = bossSupport ? [430, 555] : [350, 470, 590];
+    const y = lanes[sequenceIndex % lanes.length];
     this.enemySpawnId += 1;
     enemy.spawn(type, x, y, this.time.now, this.enemySpawnId);
 
-    const definition = ENEMIES[type];
     const notice = this.add
       .text(
         GAME_WIDTH / 2,
@@ -2574,20 +3132,89 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private spawnEnemyAttack(enemy: Enemy): void {
-    const type = enemy.definition.type;
-    const spread = type === 'abyss' ? [-0.18, 0, 0.18] : [0];
-    for (const offset of spread) {
-      this.spawnEnemyProjectile(enemy, type, offset);
+    const { attackPattern, type } = enemy.definition;
+
+    switch (attackPattern) {
+      case 'single':
+        this.spawnEnemyProjectile(enemy, type, 0);
+        break;
+      case 'triple':
+        [-0.18, 0, 0.18].forEach((offset) => {
+          this.spawnEnemyProjectile(enemy, type, offset);
+        });
+        break;
+      case 'dualFire':
+        this.spawnEnemyProjectile(enemy, type, -0.11, -12);
+        this.spawnEnemyProjectile(enemy, type, 0.11, 14);
+        break;
+      case 'iceFan':
+        [-0.24, 0, 0.24].forEach((offset) => {
+          this.spawnEnemyProjectile(enemy, type, offset);
+        });
+        break;
+      case 'machineBurst': {
+        const spawnId = enemy.spawnId;
+        const burstOffsets = [-0.04, 0.015, -0.02, 0.035];
+        burstOffsets.forEach((offset, index) => {
+          const fireBurstShot = (): void => {
+            if (
+              !enemy.active ||
+              enemy.spawnId !== spawnId ||
+              this.paused ||
+              this.gameOver
+            ) {
+              return;
+            }
+            this.spawnEnemyProjectile(enemy, type, offset, 0, 0.96 + index * 0.02);
+            this.emitMuzzleFlash(
+              enemy.x + enemy.definition.muzzleOffsetX * enemy.facingDirection,
+              enemy.y + enemy.definition.muzzleOffsetY,
+              enemy.definition.color,
+            );
+          };
+          if (index === 0) {
+            fireBurstShot();
+          } else {
+            this.time.delayedCall(index * 105, fireBurstShot);
+          }
+        });
+        break;
+      }
+      case 'arrowVolley':
+        [-0.12, 0, 0.12].forEach((offset, index) => {
+          this.spawnEnemyProjectile(enemy, type, offset, (index - 1) * 8, 1 + index * 0.025);
+        });
+        break;
+      case 'divineFan':
+        [-0.34, -0.17, 0, 0.17, 0.34].forEach((offset) => {
+          this.spawnEnemyProjectile(enemy, type, offset);
+        });
+        break;
     }
-    audioManager.play(type === 'corsair' ? 'blast' : 'enemy');
-    this.emitMuzzleFlash(enemy.x, enemy.y + 28, enemy.definition.color);
+
+    audioManager.play(type === 'corsair' || type === 'warChickens' ? 'blast' : 'enemy');
+    if (attackPattern !== 'machineBurst') {
+      this.emitMuzzleFlash(
+        enemy.x + enemy.definition.muzzleOffsetX * enemy.facingDirection,
+        enemy.y + enemy.definition.muzzleOffsetY,
+        enemy.definition.color,
+      );
+    }
   }
 
-  private spawnEnemyProjectile(enemy: Enemy, type: EnemyType, angleOffset: number): void {
+  private spawnEnemyProjectile(
+    enemy: Enemy,
+    type: EnemyType,
+    angleOffset: number,
+    muzzleYOffset = 0,
+    speedMultiplier = 1,
+  ): void {
     const definition = ENEMIES[type];
+    const originX = enemy.x + definition.muzzleOffsetX * enemy.facingDirection;
+    const originY = enemy.y + definition.muzzleOffsetY + muzzleYOffset;
     const projectile = this.enemyProjectiles.get(
-      enemy.x,
-      enemy.y + 35,
+      originX,
+      originY,
       definition.projectileTexture,
     ) as Phaser.Physics.Arcade.Image | null;
     if (!projectile) {
@@ -2598,30 +3225,42 @@ export class GameScene extends Phaser.Scene {
       .setTexture(definition.projectileTexture)
       .setActive(true)
       .setVisible(true)
-      .setPosition(enemy.x, enemy.y + 35)
-      .setDisplaySize(type === 'corsair' ? 36 : 40, type === 'corsair' ? 36 : 40)
+      .setPosition(originX, originY)
+      .setDisplaySize(definition.projectileWidth, definition.projectileHeight)
       .setDepth(16)
       .setAlpha(1)
-      .setData('enemyType', type);
+      .setRotation(0)
+      .clearTint()
+      .setData('enemyType', type)
+      .setData('bossProjectile', false)
+      .setData('bossName', null)
+      .setData('projectileKind', 'enemy');
 
-    const targetLead = type === 'corsair'
-      ? (this.player.body as Phaser.Physics.Arcade.Body).velocity.x * 0.16
-      : 0;
+    const targetLead =
+      (this.player.body as Phaser.Physics.Arcade.Body).velocity.x *
+      definition.targetLeadSeconds;
     const angle =
       Phaser.Math.Angle.Between(
-        enemy.x,
-        enemy.y,
+        originX,
+        originY,
         this.player.x + targetLead,
         this.player.y - 38,
       ) + angleOffset;
     const body = projectile.body as Phaser.Physics.Arcade.Body;
     body.enable = true;
-    body.reset(projectile.x, projectile.y);
+    body.reset(originX, originY);
     body.setAllowGravity(false);
-    body.setCircle(projectile.width * 0.4);
-    const projectileSpeed = definition.projectileSpeed * this.difficultySpeedMultiplier;
+    body.setCircle(0);
+    if (definition.projectileWidth / definition.projectileHeight >= 1.7) {
+      body.setSize(projectile.width * 0.72, projectile.height * 0.62, true);
+      projectile.setRotation(angle);
+    } else {
+      body.setCircle(Math.min(projectile.width, projectile.height) * 0.36);
+    }
+    const projectileSpeed =
+      definition.projectileSpeed * this.difficultySpeedMultiplier * speedMultiplier;
     body.setVelocity(Math.cos(angle) * projectileSpeed, Math.sin(angle) * projectileSpeed);
-    projectile.setAngularVelocity(type === 'corsair' ? 280 : type === 'fire' ? 150 : 0);
+    projectile.setAngularVelocity(definition.projectileAngularVelocity);
   }
 
   private onEnemyProjectileHit(projectile: Phaser.Physics.Arcade.Image): void {

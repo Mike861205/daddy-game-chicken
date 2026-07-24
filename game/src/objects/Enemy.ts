@@ -22,6 +22,8 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
   private baseScaleX = 1;
   private baseScaleY = 1;
   private maxHealth = 1;
+  private healthBarOffsetY = 78;
+  private healthBarFillWidth = 86;
   private healthBarBg: Phaser.GameObjects.Rectangle;
   private healthBarFill: Phaser.GameObjects.Rectangle;
 
@@ -42,6 +44,10 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.setActive(false).setVisible(false);
   }
 
+  get facingDirection(): -1 | 1 {
+    return this.direction;
+  }
+
   spawn(type: EnemyType, x: number, y: number, time: number, spawnId: number): void {
     this.definition = ENEMIES[type];
     this.spawnId = spawnId;
@@ -54,41 +60,99 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.spawnedAt = time;
     this.phase = Phaser.Math.FloatBetween(0, Math.PI * 2);
 
-    this.setTexture('enemigos-anim', this.definition.idleFrame);
-    this.setDisplaySize(132, 132);
+    if (this.definition.idleFrame === undefined) {
+      this.setTexture(this.definition.textureKey);
+    } else {
+      this.setTexture(this.definition.textureKey, this.definition.idleFrame);
+    }
+    this.setDisplaySize(this.definition.displayWidth, this.definition.displayHeight);
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
     this.enableBody(true, x, y, true, true);
     this.setActive(true).setVisible(true).setAlpha(1).setDepth(10).clearTint();
-    this.healthBarBg.setVisible(true);
-    this.healthBarFill.setVisible(true).setScale(1, 1).setFillStyle(this.definition.color, 1);
+
+    const healthBarWidth = Phaser.Math.Clamp(this.definition.displayWidth * 0.68, 94, 132);
+    this.healthBarFillWidth = healthBarWidth - 8;
+    this.healthBarOffsetY = this.definition.displayHeight * 0.5 + 18;
+    this.healthBarBg
+      .setDisplaySize(healthBarWidth, 12)
+      .setPosition(x, y - this.healthBarOffsetY)
+      .setVisible(true);
+    this.healthBarFill
+      .setDisplaySize(this.healthBarFillWidth, 6)
+      .setPosition(x - this.healthBarFillWidth * 0.5, y - this.healthBarOffsetY)
+      .setVisible(true)
+      .setFillStyle(this.definition.color, 1);
 
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setAllowGravity(false);
     body.setVelocityX(this.definition.patrolSpeed * this.direction);
-    body.setSize(this.width * 0.56, this.height * 0.58);
+    body.setSize(
+      this.width * this.definition.bodyWidthRatio,
+      this.height * this.definition.bodyHeightRatio,
+      true,
+    );
   }
 
   updateEnemy(time: number, difficultySpeedMultiplier = 1): EnemyUpdateResult {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    if (this.x <= 72) {
+    const boundaryPadding = Math.max(72, this.definition.displayWidth * 0.44);
+    if (this.x <= boundaryPadding) {
       this.direction = 1;
-    } else if (this.x >= GAME_WIDTH - 72) {
+    } else if (this.x >= GAME_WIDTH - boundaryPadding) {
       this.direction = -1;
     }
     body.setVelocityX(this.definition.patrolSpeed * difficultySpeedMultiplier * this.direction);
     this.setFlipX(this.direction < 0);
 
-    const hover = Math.sin(time * 0.0048 + this.phase);
-    this.y = this.baseY + hover * 18;
-    this.angle = Phaser.Math.Linear(this.angle, hover * 3.5 + this.direction * 2, 0.08);
+    const hover = Math.sin(time * this.definition.movementFrequency + this.phase);
+    const isAttacking = time < this.attackUntil;
+    let verticalOffset = hover * this.definition.hoverAmplitude;
+    let targetAngle = hover * this.definition.tiltAmplitude + this.direction * 2;
+
+    switch (this.definition.movementPattern) {
+      case 'swoop':
+        verticalOffset += Math.sin(time * 0.0017 + this.phase * 0.65) * 9;
+        targetAngle += this.direction * 3.5;
+        break;
+      case 'submarine':
+        verticalOffset += Math.sin(time * 0.0012 + this.phase) * 4;
+        targetAngle = hover * this.definition.tiltAmplitude;
+        break;
+      case 'gunship':
+        verticalOffset += isAttacking ? Math.sin(time * 0.075) * 3 : 0;
+        targetAngle = hover * this.definition.tiltAmplitude + this.direction;
+        break;
+      case 'gallop':
+        verticalOffset = -Math.abs(hover) * this.definition.hoverAmplitude;
+        targetAngle = hover * this.definition.tiltAmplitude + this.direction * 2.5;
+        break;
+      case 'divine':
+        verticalOffset += Math.cos(time * 0.0015 + this.phase) * 7;
+        targetAngle = hover * this.definition.tiltAmplitude;
+        break;
+      case 'hover':
+        break;
+    }
+
+    this.y = this.baseY + verticalOffset;
+    this.angle = Phaser.Math.Linear(this.angle, targetAngle, 0.08);
+    const attackPulse = isAttacking ? 0.045 : 0;
     this.setScale(
-      this.baseScaleX * (1 + hover * 0.025),
-      this.baseScaleY * (1 - hover * 0.02),
+      this.baseScaleX * (1 + hover * 0.025 + attackPulse),
+      this.baseScaleY * (1 - hover * 0.02 + attackPulse),
     );
-    this.setFrame(time < this.attackUntil ? this.definition.attackFrame : this.definition.idleFrame);
-    this.healthBarBg.setPosition(this.x, this.y - 78);
-    this.healthBarFill.setPosition(this.x - 43, this.y - 78);
+    const targetFrame = isAttacking
+      ? this.definition.attackFrame
+      : this.definition.idleFrame;
+    if (targetFrame !== undefined) {
+      this.setFrame(targetFrame);
+    }
+    this.healthBarBg.setPosition(this.x, this.y - this.healthBarOffsetY);
+    this.healthBarFill.setPosition(
+      this.x - this.healthBarFillWidth * 0.5,
+      this.y - this.healthBarOffsetY,
+    );
 
     let shouldShoot = false;
     if (time >= this.nextShotAt) {
@@ -100,13 +164,14 @@ export class Enemy extends Phaser.Physics.Arcade.Sprite {
 
     return {
       shouldShoot,
-      expired: time - this.spawnedAt > 15500,
+      expired: time - this.spawnedAt > this.definition.lifetimeMs,
     };
   }
 
   takeHit(damage: number): boolean {
     this.health -= damage;
-    this.healthBarFill.setScale(Phaser.Math.Clamp(this.health / this.maxHealth, 0, 1), 1);
+    const healthRatio = Phaser.Math.Clamp(this.health / this.maxHealth, 0, 1);
+    this.healthBarFill.setDisplaySize(this.healthBarFillWidth * healthRatio, 6);
     this.setTintFill(0xffffff);
     this.scene.time.delayedCall(75, () => {
       if (this.active) {

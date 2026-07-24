@@ -7,7 +7,11 @@ import { InstructionsScene } from './scenes/InstructionsScene.js';
 import { GameScene } from './scenes/GameScene.js';
 import { ResultScene } from './scenes/ResultScene.js';
 import { LeaderboardScene } from './scenes/LeaderboardScene.js';
+import { InstallScene } from './scenes/InstallScene.js';
+import { pwaManager } from './services/pwa.js';
 import './styles/main.css';
+
+pwaManager.initialize();
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -59,6 +63,7 @@ const config: Phaser.Types.Core.GameConfig = {
     PreloadScene,
     MenuScene,
     InstructionsScene,
+    InstallScene,
     GameScene,
     ResultScene,
     LeaderboardScene,

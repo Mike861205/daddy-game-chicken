@@ -104,6 +104,15 @@ export const EXTRA_IMAGE_KEYS = [
   'fondo-los-cabos',
   'logo-daddy-game-chicken',
   'moto-combate-daddy',
+  'enemy-two-headed-dragon',
+  'enemy-ice-submarine',
+  'enemy-war-chickens',
+  'enemy-centaur',
+  'enemy-ancient-medusa',
+  'general-storm-admiral',
+  'general-radioactive-chimera',
+  'general-elemental-eclipse',
+  'general-nova-xal',
 ] as const;
 
 /**

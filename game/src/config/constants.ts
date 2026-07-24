@@ -37,6 +37,7 @@ export const SCENES = {
   Preload: 'PreloadScene',
   Menu: 'MenuScene',
   Instructions: 'InstructionsScene',
+  Install: 'InstallScene',
   Game: 'GameScene',
   Result: 'ResultScene',
   Leaderboard: 'LeaderboardScene',
