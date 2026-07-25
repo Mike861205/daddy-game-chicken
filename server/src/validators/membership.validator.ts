@@ -25,4 +25,6 @@ export const membershipConfirmSchema = z.object({
   sessionId: z.string().trim().min(10).max(300),
 });
 
+export const membershipBenefitClaimSchema = membershipStatusQuerySchema;
+
 export type MembershipCheckoutInput = z.infer<typeof membershipCheckoutSchema>;

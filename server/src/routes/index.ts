@@ -11,6 +11,7 @@ import { createReward, validateReward } from '../controllers/reward.controller.j
 import { lookupPlayer } from '../controllers/player.controller.js';
 import {
   createMembershipCheckoutHandler,
+  claimMembershipBenefitHandler,
   confirmMembershipCheckoutHandler,
   getMembershipStatusHandler,
 } from '../controllers/membership.controller.js';
@@ -37,6 +38,11 @@ router.post(
   '/memberships/confirm',
   writeRateLimiter,
   asyncHandler(confirmMembershipCheckoutHandler),
+);
+router.post(
+  '/memberships/benefits/claim',
+  writeRateLimiter,
+  asyncHandler(claimMembershipBenefitHandler),
 );
 
 // Game sessions

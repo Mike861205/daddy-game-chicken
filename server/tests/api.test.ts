@@ -21,6 +21,10 @@ const prismaMock = {
     findFirst: vi.fn(),
     upsert: vi.fn(),
   },
+  membershipMonthlyBenefit: {
+    upsert: vi.fn(),
+    updateMany: vi.fn(),
+  },
 };
 
 vi.mock('../src/config/prisma.js', () => ({
@@ -42,6 +46,11 @@ beforeEach(() => {
     id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
   });
   prismaMock.membership.upsert.mockResolvedValue({});
+  prismaMock.membershipMonthlyBenefit.upsert.mockResolvedValue({
+    id: 'monthly-benefit-id',
+    code: 'ELITE-202607-ABC123',
+  });
+  prismaMock.membershipMonthlyBenefit.updateMany.mockResolvedValue({ count: 1 });
   prismaMock.$transaction.mockImplementation(async (operations) => Promise.all(operations));
 });
 
@@ -357,6 +366,62 @@ describe('Membership API', () => {
     expect(prismaMock.membership.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({ status: 'INCOMPLETE' }),
+      }),
+    );
+  });
+
+  it('returns the reusable Plus discount only for its registered active member', async () => {
+    prismaMock.player.findFirst.mockResolvedValue({
+      id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+      name: 'Daddy Demo',
+      nickname: 'DaddyMaster',
+      phone: '6241234567',
+      membership: {
+        id: 'active-plus-id',
+        plan: 'DADDY_PLUS',
+        status: 'ACTIVE',
+      },
+    });
+    const response = await request(app)
+      .post('/api/memberships/benefits/claim')
+      .send({ phone: '6241234567' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.benefit).toMatchObject({
+      planId: 'daddy-plus',
+      reusable: true,
+      registeredPhone: '6241234567',
+    });
+    expect(prismaMock.membershipMonthlyBenefit.upsert).not.toHaveBeenCalled();
+  });
+
+  it('marks the Elite benefit requested for the current calendar month', async () => {
+    prismaMock.player.findFirst.mockResolvedValue({
+      id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+      name: 'Daddy Elite',
+      nickname: 'ReyDaddy',
+      phone: '6241234567',
+      membership: {
+        id: 'active-elite-id',
+        plan: 'DADDY_ELITE',
+        status: 'ACTIVE',
+      },
+    });
+    const response = await request(app)
+      .post('/api/memberships/benefits/claim')
+      .send({ phone: '6241234567' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.benefit).toMatchObject({
+      planId: 'daddy-elite',
+      reusable: false,
+      available: false,
+      registeredPhone: '6241234567',
+    });
+    expect(response.body.data.benefit.period).toMatch(/^\d{4}-\d{2}$/u);
+    expect(prismaMock.membershipMonthlyBenefit.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ redeemedAt: null }),
       }),
     );
   });

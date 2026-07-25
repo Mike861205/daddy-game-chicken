@@ -32,12 +32,14 @@ export class MembershipWelcomeScene extends Phaser.Scene {
   private statusText?: Phaser.GameObjects.Text;
   private actionText?: Phaser.GameObjects.Text;
   private actionButton?: Phaser.GameObjects.Rectangle;
+  private accessConfirmed = false;
 
   constructor() {
     super(SCENES.MembershipWelcome);
   }
 
   init(data: WelcomeData): void {
+    this.accessConfirmed = false;
     const storedPlan = sessionStorage.getItem('dgc.pendingMembershipPlan');
     this.planId = data.planId
       ?? (storedPlan === 'daddy-elite' ? 'daddy-elite' : 'daddy-plus');
@@ -174,56 +176,84 @@ export class MembershipWelcomeScene extends Phaser.Scene {
     }).setDepth(20);
     this.time.delayedCall(3900, () => confetti.stop());
 
-    const panel = this.add.container(GAME_WIDTH / 2, 880).setAlpha(0).setScale(0.92);
+    const panel = this.add.container(GAME_WIDTH / 2, 872).setAlpha(0).setScale(0.92);
     const panelGlow = this.add
-      .rectangle(0, 0, 642, 500, accent, 0.11)
-      .setStrokeStyle(6, accent, 0.22);
+      .rectangle(0, 0, 672, 552, accent, 0.12)
+      .setStrokeStyle(8, accent, 0.24);
     const panelBg = this.add
-      .rectangle(0, 0, 624, 482, 0x06142e, 0.985)
-      .setStrokeStyle(3, accent, 0.94);
+      .rectangle(0, 0, 652, 532, 0x041127, 0.99)
+      .setStrokeStyle(4, accent, 0.98);
+    const titleGlow = this.add
+      .rectangle(0, -225, 560, 58, accent, 0.13)
+      .setStrokeStyle(2, accent, 0.48);
     const unlocked = this.add
-      .text(0, -205, 'TUS BENEFICIOS', {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '22px',
+      .text(0, -225, '✦  TUS BENEFICIOS DESBLOQUEADOS  ✦', {
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        fontSize: '24px',
         color: accentHex,
+        stroke: '#020817',
+        strokeThickness: 5,
+        letterSpacing: 1,
       })
-      .setOrigin(0.5);
-    const benefitTexts = plan.benefits.map((benefit, index) =>
-      this.add
-        .text(-270, -154 + index * 61, `✓  ${benefit}`, {
-          fontFamily: 'Trebuchet MS, Arial, sans-serif',
-          fontSize: '16px',
-          fontStyle: 'bold',
-          color: '#ffffff',
-          wordWrap: { width: 540, useAdvancedWrap: true },
-        })
-        .setOrigin(0, 0.5),
-    );
+      .setOrigin(0.5)
+      .setShadow(0, 0, accentHex, 12, true, true);
+    const benefitDefinitions = plan.id === 'daddy-elite'
+      ? [
+        { icon: '★', title: 'TODO DADDY PLUS', detail: 'Vestuario, arsenal y avión incluidos' },
+        { icon: '🍟', title: 'PAPAS CON POLLO', detail: 'Una porción chica gratis cada mes' },
+        { icon: '🥤', title: 'REFRESCO GRATIS', detail: '325 ml incluido en tu premio mensual' },
+        { icon: '⚡', title: 'PODER ELITE', detail: 'Rayos, fuego o terremoto por mundo' },
+      ]
+      : [
+        { icon: '%', title: '10% EN TUS COMPRAS', detail: 'Disponible siempre con tu plan activo' },
+        { icon: '♛', title: '4 VESTIMENTAS', detail: '2 inmediatas + 2 por desbloquear' },
+        { icon: '⚔', title: '3 ARMAS EXCLUSIVAS', detail: 'Poder máximo durante 15 segundos' },
+        { icon: '✈', title: 'AVIÓN DADDY', detail: 'Ataque aéreo 10 segundos por mundo' },
+      ];
+    const benefitCards = benefitDefinitions.map((benefit, index) => {
+      const column = index % 2;
+      const row = Math.floor(index / 2);
+      return this.createBenefitCard(
+        column === 0 ? -158 : 158,
+        -130 + row * 124,
+        benefit.icon,
+        benefit.title,
+        benefit.detail,
+        accent,
+        accentHex,
+      );
+    });
     this.statusText = this.add
-      .text(0, 114, 'CONFIRMANDO TU PAGO SEGURO...', {
+      .text(0, 130, '🔒 CONFIRMANDO TU PAGO SEGURO...', {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '14px',
+        fontSize: '15px',
         color: '#b9c9e8',
         align: 'center',
         wordWrap: { width: 540 },
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setShadow(0, 0, '#43d9ff', 6, true, true);
     this.actionButton = this.add
-      .rectangle(0, 184, 520, 68, plan.color, 1)
-      .setStrokeStyle(3, COLORS.white, 0.9)
+      .rectangle(0, 205, 544, 72, plan.color, 1)
+      .setStrokeStyle(4, COLORS.white, 0.95)
       .setInteractive({ useHandCursor: true });
     this.actionText = this.add
-      .text(0, 184, 'VER MIS BENEFICIOS', {
+      .text(0, 205, 'VER MIS BENEFICIOS', {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '18px',
+        fontSize: '19px',
         color: '#ffffff',
+        stroke: '#041127',
+        strokeThickness: 4,
+        letterSpacing: 1,
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setShadow(0, 0, '#ffffff', 6, true, true);
     panel.add([
       panelGlow,
       panelBg,
+      titleGlow,
       unlocked,
-      ...benefitTexts,
+      ...benefitCards,
       this.statusText,
       this.actionButton,
       this.actionText,
@@ -232,13 +262,13 @@ export class MembershipWelcomeScene extends Phaser.Scene {
     this.actionButton.on('pointerout', () => panel.setScale(1));
     this.actionButton.on('pointerup', () => {
       audioManager.play('click');
-      this.scene.start(SCENES.Membership);
+      this.scene.start(this.accessConfirmed ? SCENES.Menu : SCENES.Membership);
     });
     this.tweens.add({
       targets: panel,
       alpha: 1,
       scale: 1,
-      y: 858,
+      y: 850,
       duration: 620,
       delay: 1150,
       ease: 'Back.out',
@@ -246,6 +276,64 @@ export class MembershipWelcomeScene extends Phaser.Scene {
 
     window.history.replaceState({}, '', window.location.pathname);
     void this.confirmAccess();
+  }
+
+  private createBenefitCard(
+    x: number,
+    y: number,
+    icon: string,
+    title: string,
+    detail: string,
+    accent: number,
+    accentHex: string,
+  ): Phaser.GameObjects.Container {
+    const card = this.add.container(x, y);
+    const glow = this.add
+      .rectangle(0, 0, 298, 112, accent, 0.08)
+      .setStrokeStyle(5, accent, 0.12);
+    const background = this.add
+      .rectangle(0, 0, 286, 102, 0x0a2149, 0.96)
+      .setStrokeStyle(2, accent, 0.7);
+    const iconBackground = this.add
+      .circle(-103, 0, 31, accent, 0.2)
+      .setStrokeStyle(2, accent, 0.95);
+    const iconText = this.add
+      .text(-103, 0, icon, {
+        fontFamily: 'Arial Black, Arial, sans-serif',
+        fontSize: icon.length > 1 ? '26px' : '31px',
+        color: accentHex,
+        stroke: '#020817',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+    const titleText = this.add
+      .text(-60, -17, title, {
+        fontFamily: 'Arial Black, Trebuchet MS, sans-serif',
+        fontSize: '14px',
+        color: '#ffffff',
+        stroke: '#020817',
+        strokeThickness: 3,
+      })
+      .setOrigin(0, 0.5);
+    const detailText = this.add
+      .text(-60, 16, detail, {
+        fontFamily: 'Trebuchet MS, Arial, sans-serif',
+        fontSize: '11px',
+        fontStyle: 'bold',
+        color: '#cfe8ff',
+        lineSpacing: 2,
+        wordWrap: { width: 186, useAdvancedWrap: true },
+      })
+      .setOrigin(0, 0.5);
+    card.add([glow, background, iconBackground, iconText, titleText, detailText]);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.45, to: 1 },
+      duration: 850 + Math.abs(x),
+      yoyo: true,
+      repeat: -1,
+    });
+    return card;
   }
 
   private async confirmAccess(): Promise<void> {
@@ -270,14 +358,15 @@ export class MembershipWelcomeScene extends Phaser.Scene {
 
     if (!this.scene.isActive()) return;
     if (hasActiveMembership(membership)) {
+      this.accessConfirmed = true;
       membership.selectedOutfit = storage.getSelectedOutfit();
       membership.selectedWeapon = storage.getSelectedWeapon();
       storage.setMembership(membership);
       this.registry.set(REGISTRY.membership, membership);
       this.statusText
-        ?.setText('✓ BENEFICIOS DESBLOQUEADOS EN ESTE TELÉFONO')
+        ?.setText('✓ MEMBRESÍA ACTIVA · SESIÓN GUARDADA EN ESTE DISPOSITIVO')
         .setColor(COLORS_HEX.neon);
-      this.actionText?.setText('ENTRAR A MI MEMBRESÍA');
+      this.actionText?.setText('IR AL MENÚ Y JUGAR');
       sessionStorage.removeItem('dgc.pendingMembershipPlan');
       sessionStorage.removeItem('dgc.pendingMembershipProduct');
     } else {

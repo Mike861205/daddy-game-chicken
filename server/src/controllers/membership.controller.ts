@@ -1,11 +1,13 @@
 import type { Request, Response } from 'express';
 import {
   membershipCheckoutSchema,
+  membershipBenefitClaimSchema,
   membershipConfirmSchema,
   membershipStatusQuerySchema,
 } from '../validators/membership.validator.js';
 import {
   createMembershipCheckout,
+  claimMembershipBenefit,
   confirmMembershipCheckout,
   getMembershipStatus,
   handleStripeWebhook,
@@ -34,6 +36,15 @@ export async function confirmMembershipCheckoutHandler(
   const { phone } = membershipStatusQuerySchema.parse({ phone: req.body?.phone });
   const membership = await confirmMembershipCheckout(sessionId, phone);
   res.json({ data: { membership } });
+}
+
+export async function claimMembershipBenefitHandler(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const { phone } = membershipBenefitClaimSchema.parse(req.body);
+  const benefit = await claimMembershipBenefit(phone);
+  res.json({ data: { benefit } });
 }
 
 export async function stripeWebhookHandler(req: Request, res: Response): Promise<void> {

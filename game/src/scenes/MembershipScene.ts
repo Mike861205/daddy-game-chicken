@@ -875,7 +875,7 @@ export class MembershipScene extends Phaser.Scene {
       monthlyBenefit: planId === 'daddy-elite'
         ? {
           available: true,
-          label: 'Papas con pollo chico + Coca-Cola 350 ml',
+          label: 'Papas con pollo chico + refresco de 325 ml',
         }
         : null,
     };

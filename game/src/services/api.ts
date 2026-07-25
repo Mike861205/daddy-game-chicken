@@ -206,4 +206,35 @@ export const api = {
     );
     return response.data.membership;
   },
+  async claimMembershipBenefit(phone: string): Promise<{
+    planId: MembershipPlanId;
+    label: string;
+    available: boolean;
+    reusable: boolean;
+    code: string | null;
+    period: string | null;
+    registeredPhone: string;
+    memberName: string | null;
+    avatar: string;
+  }> {
+    const response = await request<{
+      data: {
+        benefit: {
+          planId: MembershipPlanId;
+          label: string;
+          available: boolean;
+          reusable: boolean;
+          code: string | null;
+          period: string | null;
+          registeredPhone: string;
+          memberName: string | null;
+          avatar: string;
+        };
+      };
+    }>('/memberships/benefits/claim', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+    return response.data.benefit;
+  },
 };

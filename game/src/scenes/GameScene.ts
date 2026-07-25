@@ -1082,8 +1082,12 @@ export class GameScene extends Phaser.Scene {
         0,
         37,
         elite
-          ? 'ARMA VIP 15s  •  AVIÓN 10s  •  PODER ELITE\n10% DESCUENTO  •  BENEFICIO MENSUAL'
-          : 'ARMA VIP 15s  •  AVIÓN 10s\nVESTUARIO EXCLUSIVO  •  10% DESCUENTO',
+          ? `ARMA VIP 15s  •  AVIÓN 10s  •  PODER ELITE\n${
+            this.membership.monthlyBenefit?.available
+              ? '🎁 PREMIO MENSUAL DISPONIBLE'
+              : '✓ PREMIO MENSUAL YA SOLICITADO'
+          }`
+          : 'ARMA VIP 15s  •  AVIÓN 10s\n🎁 10% DE DESCUENTO SIEMPRE DISPONIBLE',
         {
           fontFamily: 'Arial Black, sans-serif',
           fontSize: '12px',

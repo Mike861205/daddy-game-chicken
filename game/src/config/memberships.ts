@@ -51,6 +51,9 @@ export interface MembershipEntitlement {
   monthlyBenefit: {
     available: boolean;
     label: string;
+    code?: string | null;
+    redeemedAt?: string | null;
+    period?: string;
   } | null;
 }
 
@@ -85,7 +88,7 @@ export const MEMBERSHIP_PLANS: Record<MembershipPlanId, MembershipPlanDefinition
     benefits: [
       'Todo lo incluido en Daddy Plus',
       '1 papas con pollo chico gratis cada mes',
-      '1 Coca-Cola de 350 ml gratis cada mes',
+      '1 refresco de 325 ml gratis cada mes',
       'Poder unico por mundo: rayos, fuego o terremoto',
     ],
   },

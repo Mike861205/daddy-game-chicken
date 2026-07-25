@@ -1,8 +1,10 @@
+import { randomBytes } from 'node:crypto';
 import Stripe from 'stripe';
 import {
   MembershipPlan,
   MembershipStatus,
   type Membership,
+  type MembershipMonthlyBenefit,
 } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import { env } from '../config/env.js';
@@ -10,6 +12,11 @@ import { AppError } from '../utils/AppError.js';
 import type { MembershipCheckoutInput } from '../validators/membership.validator.js';
 
 type PublicPlanId = 'daddy-plus' | 'daddy-elite';
+type MembershipWithBenefits = Membership & {
+  monthlyBenefits?: MembershipMonthlyBenefit[];
+};
+
+const MEMBERSHIP_TIME_ZONE = 'America/Chihuahua';
 
 const PUBLIC_PLAN_BY_DATABASE: Record<MembershipPlan, PublicPlanId> = {
   DADDY_PLUS: 'daddy-plus',
@@ -101,7 +108,18 @@ async function planFromCheckoutProducts(
   throw AppError.badRequest('El producto pagado no corresponde a una membresia configurada.');
 }
 
-function formatMembership(membership: Membership | null) {
+function calendarPeriod(date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: MEMBERSHIP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  return `${year ?? date.getUTCFullYear()}-${month ?? String(date.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMembership(membership: MembershipWithBenefits | null) {
   if (!membership) {
     return {
       planId: null,
@@ -115,6 +133,7 @@ function formatMembership(membership: Membership | null) {
   }
   const active = membership.status === MembershipStatus.ACTIVE;
   const elite = membership.plan === MembershipPlan.DADDY_ELITE;
+  const currentBenefit = membership.monthlyBenefits?.[0] ?? null;
   return {
     planId: PUBLIC_PLAN_BY_DATABASE[membership.plan],
     status: statusToPublic(membership.status),
@@ -124,20 +143,97 @@ function formatMembership(membership: Membership | null) {
     cancelAtPeriodEnd: membership.cancelAtPeriodEnd,
     monthlyBenefit: active && elite
       ? {
-        available: true,
-        label: 'Papas con pollo chico + Coca-Cola 350 ml',
+        available: !currentBenefit?.redeemedAt,
+        label: 'Papas con pollo chico + refresco de 325 ml',
+        code: currentBenefit?.code ?? null,
+        redeemedAt: currentBenefit?.redeemedAt?.toISOString() ?? null,
+        period: calendarPeriod(),
       }
       : null,
   };
 }
 
 export async function getMembershipStatus(phone: string) {
+  const period = calendarPeriod();
+  const player = await prisma.player.findFirst({
+    where: { phone },
+    orderBy: { updatedAt: 'desc' },
+    include: {
+      membership: {
+        include: {
+          monthlyBenefits: {
+            where: { period },
+            take: 1,
+          },
+        },
+      },
+    },
+  });
+  return formatMembership(player?.membership ?? null);
+}
+
+export async function claimMembershipBenefit(phone: string) {
   const player = await prisma.player.findFirst({
     where: { phone },
     orderBy: { updatedAt: 'desc' },
     include: { membership: true },
   });
-  return formatMembership(player?.membership ?? null);
+  const membership = player?.membership;
+  if (!player || !membership || membership.status !== MembershipStatus.ACTIVE) {
+    throw AppError.notFound('No encontramos una membresia activa para este telefono.');
+  }
+
+  if (membership.plan === MembershipPlan.DADDY_PLUS) {
+    return {
+      planId: 'daddy-plus' as const,
+      label: '10% de descuento en tu compra',
+      available: true,
+      reusable: true,
+      code: null,
+      period: null,
+      registeredPhone: phone,
+      memberName: player.name,
+      avatar: player.nickname,
+    };
+  }
+
+  const period = calendarPeriod();
+  const benefit = await prisma.membershipMonthlyBenefit.upsert({
+    where: {
+      membershipId_period: {
+        membershipId: membership.id,
+        period,
+      },
+    },
+    create: {
+      membershipId: membership.id,
+      period,
+      code: `ELITE-${period.replace('-', '')}-${randomBytes(3).toString('hex').toUpperCase()}`,
+    },
+    update: {},
+  });
+  const claimed = await prisma.membershipMonthlyBenefit.updateMany({
+    where: {
+      id: benefit.id,
+      redeemedAt: null,
+    },
+    data: { redeemedAt: new Date() },
+  });
+  if (claimed.count === 0) {
+    throw AppError.conflict('Tu premio Elite de este mes ya fue solicitado.');
+  }
+
+  return {
+    planId: 'daddy-elite' as const,
+    label: '1 papas con pollo chico gratis + 1 refresco de 325 ml gratis',
+    available: false,
+    reusable: false,
+    code: benefit.code,
+    period,
+    registeredPhone: phone,
+    memberName: player.name,
+    avatar: player.nickname,
+  };
 }
 
 export async function createMembershipCheckout(input: MembershipCheckoutInput) {

@@ -13,6 +13,11 @@ import { api } from '../services/api.js';
 import type { PublicConfig } from '../types.js';
 import { buildWhatsAppUrl } from '../utils/whatsapp.js';
 import { pwaManager } from '../services/pwa.js';
+import {
+  MEMBERSHIP_PLANS,
+  hasActiveMembership,
+  type MembershipEntitlement,
+} from '../config/memberships.js';
 
 const FOOD_ORDER_MESSAGE = 'Quiero pedir de comer a Daddy Pollo, ¿me regalas el menú?';
 
@@ -23,6 +28,16 @@ export class MenuScene extends Phaser.Scene {
   private soundButton?: Phaser.GameObjects.Text;
   private formOpen = false;
   private transitioning = false;
+  private memberSessionPromise?: Promise<void>;
+  private rememberedPlayer?: {
+    name: string | null;
+    avatar: string;
+    phone: string | null;
+  };
+  private activeMembership?: MembershipEntitlement;
+  private memberBadge?: Phaser.GameObjects.Container;
+  private rewardButton?: Phaser.GameObjects.Container;
+  private rewardClaiming = false;
 
   constructor() {
     super(SCENES.Menu);
@@ -31,6 +46,9 @@ export class MenuScene extends Phaser.Scene {
   create(): void {
     this.formOpen = false;
     this.transitioning = false;
+    this.rewardClaiming = false;
+    this.rememberedPlayer = undefined;
+    this.activeMembership = undefined;
     this.input.enabled = true;
     if (this.input.keyboard) {
       this.input.keyboard.enabled = true;
@@ -67,6 +85,7 @@ export class MenuScene extends Phaser.Scene {
       logo.setScale(maxLogoWidth / logo.width);
     }
     this.tweens.add({ targets: logo, y: 258, duration: 1450, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.memberBadge = this.add.container(cx, 82).setDepth(30).setVisible(false);
 
     const kicker = this.add
       .text(cx, 412, '⚡  MENÚ PRINCIPAL  ⚡', {
@@ -82,7 +101,7 @@ export class MenuScene extends Phaser.Scene {
     createTitle(this, cx, 458, 'ATRAPA EL SABOR', 38, '#ffffff');
 
     // Main buttons.
-    createButton(this, cx, 530, 'JUGAR', () => void this.openRegistration(), {
+    createButton(this, cx, 530, 'JUGAR', () => void this.playPrimary(), {
       width: 500,
       height: 68,
       fontSize: 31,
@@ -167,6 +186,264 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.85);
     this.createWhatsAppOrderButton(505, GAME_HEIGHT - 68, phone);
+    this.memberSessionPromise = this.restoreMemberSession();
+  }
+
+  /**
+   * Active members are recognized on this browser with the registered phone
+   * and revalidated against the server before premium access is displayed.
+   */
+  private async restoreMemberSession(): Promise<void> {
+    const phone = storage.getPlayerPhone();
+    if (!phone) return;
+    const [player, membership] = await Promise.all([
+      api.lookupPlayer(phone),
+      api.getMembershipStatus(phone),
+    ]);
+    if (!this.scene.isActive() || !player || !hasActiveMembership(membership)) return;
+
+    membership.selectedOutfit = storage.getSelectedOutfit();
+    membership.selectedWeapon = storage.getSelectedWeapon();
+    this.rememberedPlayer = player;
+    this.activeMembership = membership;
+    storage.setMembership(membership);
+    this.registry.set(REGISTRY.membership, membership);
+    this.registry.set(REGISTRY.playerName, player.name ?? player.avatar);
+    this.registry.set(REGISTRY.playerPhone, player.phone ?? phone);
+    this.registry.set(REGISTRY.nickname, player.avatar);
+    this.renderMemberBadge();
+    this.renderRewardButton();
+  }
+
+  private async playPrimary(): Promise<void> {
+    if (this.memberSessionPromise) {
+      await this.memberSessionPromise;
+    }
+    const membership = this.activeMembership;
+    const player = this.rememberedPlayer;
+    if (hasActiveMembership(membership) && player) {
+      const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
+      const branch = storage.getBranch() ?? config?.branches[0]?.id ?? '';
+      await this.startWithPlayer({
+        name: player.name ?? player.avatar,
+        avatar: player.avatar,
+        phone: player.phone ?? storage.getPlayerPhone(),
+        branch,
+      });
+      return;
+    }
+    await this.openRegistration();
+  }
+
+  private renderMemberBadge(): void {
+    const membership = this.activeMembership;
+    const player = this.rememberedPlayer;
+    if (!this.memberBadge || !hasActiveMembership(membership) || !player) return;
+    const plan = MEMBERSHIP_PLANS[membership.planId];
+    const elite = plan.id === 'daddy-elite';
+    const accent = elite ? 0x8b5cff : 0xffc928;
+    const accentHex = elite ? '#d8c5ff' : '#ffe678';
+    const symbol = elite ? '◆' : '★';
+    this.memberBadge.removeAll(true);
+
+    const glow = this.add
+      .rectangle(0, 0, 518, 66, accent, 0.18)
+      .setStrokeStyle(6, accent, 0.22);
+    const background = this.add
+      .rectangle(0, 0, 500, 56, 0x03112d, 0.96)
+      .setStrokeStyle(2, accent, 1);
+    const planLabel = this.add
+      .text(0, -10, `${symbol}  ${plan.name} ACTIVO  ${symbol}`, {
+        fontFamily: 'Arial Black, Trebuchet MS, sans-serif',
+        fontSize: '19px',
+        color: accentHex,
+        stroke: '#020817',
+        strokeThickness: 4,
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5)
+      .setShadow(0, 0, accentHex, 10, true, true);
+    const userLabel = this.add
+      .text(0, 14, `SESIÓN INICIADA · ${player.avatar} ${player.name ?? ''}`.trim(), {
+        fontFamily: 'Trebuchet MS, Arial, sans-serif',
+        fontSize: '12px',
+        fontStyle: 'bold',
+        color: '#ffffff',
+        letterSpacing: 1,
+      })
+      .setOrigin(0.5);
+    this.memberBadge.add([glow, background, planLabel, userLabel]).setVisible(true);
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.55, to: 1 },
+      duration: 950,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+  }
+
+  private renderRewardButton(): void {
+    this.rewardButton?.destroy(true);
+    this.rewardButton = undefined;
+    const membership = this.activeMembership;
+    if (!hasActiveMembership(membership)) return;
+    if (membership.planId === 'daddy-elite' && !membership.monthlyBenefit?.available) return;
+
+    const elite = membership.planId === 'daddy-elite';
+    const accent = elite ? 0x9c64ff : 0xffc928;
+    const accentHex = elite ? '#eadfff' : '#fff0a3';
+    const wrapper = this.add.container(64, 500).setDepth(40);
+    const glow = this.add
+      .circle(0, 0, 53, accent, 0.22)
+      .setStrokeStyle(8, accent, 0.2)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const background = this.add
+      .circle(0, 0, 44, 0x06142e, 0.98)
+      .setStrokeStyle(4, accent, 1);
+    const gift = this.add
+      .text(0, -3, '🎁', {
+        fontFamily: 'Arial, sans-serif',
+        fontSize: '43px',
+      })
+      .setOrigin(0.5);
+    const available = this.add
+      .text(0, 58, elite ? 'PREMIO\nDEL MES' : '10% DE\nDESCUENTO', {
+        fontFamily: 'Arial Black, Trebuchet MS, sans-serif',
+        fontSize: elite ? '12px' : '11px',
+        color: accentHex,
+        stroke: '#020817',
+        strokeThickness: 4,
+        align: 'center',
+        lineSpacing: 1,
+      })
+      .setOrigin(0.5)
+      .setShadow(0, 0, accentHex, 8, true, true);
+    const hitZone = this.add
+      .circle(0, 10, 68, 0xffffff, 0.001)
+      .setInteractive({ useHandCursor: true });
+    wrapper.add([glow, background, gift, available, hitZone]);
+    hitZone.on('pointerover', () => wrapper.setScale(1.08));
+    hitZone.on('pointerout', () => wrapper.setScale(1));
+    hitZone.on('pointerup', () => void this.requestMembershipReward());
+    this.tweens.add({
+      targets: wrapper,
+      y: { from: 491, to: 509 },
+      duration: 920,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.55, to: 1 },
+      scale: { from: 0.92, to: 1.1 },
+      duration: 760,
+      yoyo: true,
+      repeat: -1,
+    });
+    this.rewardButton = wrapper;
+  }
+
+  private async requestMembershipReward(): Promise<void> {
+    if (this.rewardClaiming) return;
+    const membership = this.activeMembership;
+    const phone = storage.getPlayerPhone();
+    if (!hasActiveMembership(membership) || !phone) return;
+    this.rewardClaiming = true;
+    audioManager.unlock();
+    audioManager.play('click');
+    const popup = window.open('', '_blank');
+    if (popup) popup.opener = null;
+    try {
+      const benefit = await api.claimMembershipBenefit(phone);
+      const config = this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined;
+      const businessPhone = config?.contact.businessPhone ?? '6241548148';
+      const identity = `${benefit.avatar}${benefit.memberName ? ` · ${benefit.memberName}` : ''}`;
+      const message = benefit.planId === 'daddy-plus'
+        ? [
+          'Hola Daddy Pollo. Quiero usar mi beneficio de membresía.',
+          `Miembro: ${identity}`,
+          `Teléfono registrado: ${benefit.registeredPhone}`,
+          'Plan: DADDY PLUS',
+          'Premio: 10% de descuento en esta compra.',
+        ].join('\n')
+        : [
+          'Hola Daddy Pollo. Solicito mi premio mensual de membresía.',
+          `Miembro: ${identity}`,
+          `Teléfono registrado: ${benefit.registeredPhone}`,
+          'Plan: DADDY ELITE',
+          `Periodo: ${benefit.period}`,
+          'Premio: 1 papas con pollo chico gratis + 1 refresco de 325 ml gratis.',
+          `Código: ${benefit.code}`,
+        ].join('\n');
+      const destination = buildWhatsAppUrl(businessPhone, message);
+
+      if (benefit.planId === 'daddy-elite') {
+        membership.monthlyBenefit = {
+          available: false,
+          label: benefit.label,
+          code: benefit.code,
+          redeemedAt: new Date().toISOString(),
+          period: benefit.period ?? undefined,
+        };
+        storage.setMembership(membership);
+        this.registry.set(REGISTRY.membership, membership);
+        this.rewardButton?.destroy(true);
+        this.rewardButton = undefined;
+      }
+      this.showMemberNotice(
+        benefit.planId === 'daddy-elite'
+          ? 'PREMIO DEL MES SOLICITADO'
+          : 'BENEFICIO PLUS LISTO EN WHATSAPP',
+        0x21e6c1,
+      );
+      if (popup) {
+        popup.location.href = destination;
+      } else {
+        window.location.assign(destination);
+      }
+    } catch (error) {
+      popup?.close();
+      const message = error instanceof Error ? error.message : 'No pudimos solicitar el premio.';
+      if (membership.planId === 'daddy-elite' && message.toLowerCase().includes('ya fue')) {
+        membership.monthlyBenefit = membership.monthlyBenefit
+          ? { ...membership.monthlyBenefit, available: false }
+          : null;
+        storage.setMembership(membership);
+        this.rewardButton?.destroy(true);
+        this.rewardButton = undefined;
+      }
+      this.showMemberNotice(message.toUpperCase(), 0xff556d);
+    } finally {
+      this.rewardClaiming = false;
+    }
+  }
+
+  private showMemberNotice(message: string, color: number): void {
+    const notice = this.add.container(GAME_WIDTH / 2, 470).setDepth(100);
+    const background = this.add
+      .rectangle(0, 0, 570, 70, 0x020817, 0.98)
+      .setStrokeStyle(3, color, 1);
+    const label = this.add
+      .text(0, 0, message, {
+        fontFamily: 'Arial Black, Trebuchet MS, sans-serif',
+        fontSize: '15px',
+        color: '#ffffff',
+        align: 'center',
+        wordWrap: { width: 520 },
+      })
+      .setOrigin(0.5);
+    notice.add([background, label]).setAlpha(0);
+    this.tweens.add({
+      targets: notice,
+      alpha: 1,
+      y: 450,
+      duration: 220,
+      yoyo: true,
+      hold: 2200,
+      onComplete: () => notice.destroy(true),
+    });
   }
 
   private openInstallModule(): void {
