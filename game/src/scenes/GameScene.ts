@@ -25,6 +25,14 @@ import {
 } from '../config/generals.js';
 import { WEAPONS } from '../config/weapons.js';
 import { WORLDS, type WorldDefinition } from '../config/worlds.js';
+import {
+  EMPTY_MEMBERSHIP,
+  OUTFITS,
+  PREMIUM_WEAPONS,
+  hasActiveMembership,
+  isEliteMembership,
+  type MembershipEntitlement,
+} from '../config/memberships.js';
 import { Boss } from '../objects/Boss.js';
 import { CombatBike } from '../objects/CombatBike.js';
 import { Enemy } from '../objects/Enemy.js';
@@ -33,12 +41,19 @@ import { Player } from '../objects/Player.js';
 import { audioManager } from '../services/audio.js';
 import { DEFAULT_CONFIG } from '../services/api.js';
 import { removeRegistrationOverlays } from '../services/registrationForm.js';
+import { storage } from '../services/storage.js';
 import { generateUuid } from '../utils/uuid.js';
 import type { GameResult, PublicConfig } from '../types.js';
 
 interface TouchControl {
   visual: Phaser.GameObjects.Container;
   hitZone: Phaser.GameObjects.Zone;
+}
+
+interface VipAbilityControl {
+  visual: Phaser.GameObjects.Container;
+  label: Phaser.GameObjects.Text;
+  button: Phaser.GameObjects.Rectangle;
 }
 
 interface BossProjectileOptions {
@@ -69,6 +84,7 @@ export class GameScene extends Phaser.Scene {
   private general!: Boss;
   private combatBike!: CombatBike;
   private config!: PublicConfig;
+  private membership: MembershipEntitlement = { ...EMPTY_MEMBERSHIP };
 
   private score = 0;
   private lives = 3;
@@ -114,6 +130,17 @@ export class GameScene extends Phaser.Scene {
   private enemySpawnId = 0;
   private nextBossReinforcementAt = 0;
   private nextCombatBikeShotAt = 0;
+  private premiumWeaponActiveUntil = 0;
+  private premiumWeaponUsedWorlds = new Set<number>();
+  private premiumPlaneUsedWorlds = new Set<number>();
+  private elitePowerUsedWorlds = new Set<number>();
+  private elitePowerCharge = 25;
+  private premiumPlane?: Phaser.GameObjects.Container;
+  private premiumPlaneExpiresAt = 0;
+  private nextPremiumPlaneShotAt = 0;
+  private premiumWeaponControl?: VipAbilityControl;
+  private premiumPlaneControl?: VipAbilityControl;
+  private elitePowerControl?: VipAbilityControl;
 
   // HUD.
   private scoreText!: Phaser.GameObjects.Text;
@@ -176,6 +203,10 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
     this.config =
       (this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined) ?? DEFAULT_CONFIG;
+    this.membership =
+      (this.registry.get(REGISTRY.membership) as MembershipEntitlement | undefined)
+      ?? storage.getMembership()
+      ?? { ...EMPTY_MEMBERSHIP };
     this.applyDifficultySettings(this.config.difficultyLevel);
     this.refreshWorldPace();
     this.timeLeft = this.getBossArrivalSeconds();
@@ -192,6 +223,7 @@ export class GameScene extends Phaser.Scene {
     this.createHud();
     this.equipStartingWeapon();
     this.createTouchControls();
+    this.createMembershipControls();
     this.createKeyboardControls();
     this.createPauseButton();
     this.setupVisibilityPause();
@@ -235,6 +267,13 @@ export class GameScene extends Phaser.Scene {
     this.enemySpawnId = 0;
     this.nextBossReinforcementAt = 0;
     this.nextCombatBikeShotAt = 0;
+    this.premiumWeaponActiveUntil = 0;
+    this.premiumWeaponUsedWorlds.clear();
+    this.premiumPlaneUsedWorlds.clear();
+    this.elitePowerUsedWorlds.clear();
+    this.elitePowerCharge = 25;
+    this.premiumPlaneExpiresAt = 0;
+    this.nextPremiumPlaneShotAt = 0;
     this.leftPressed = false;
     this.rightPressed = false;
     this.dragging = false;
@@ -377,7 +416,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createPlayer(): void {
-    this.player = new Player(this, GAME_WIDTH / 2, GAME_HEIGHT - 150);
+    const selectedOutfit = hasActiveMembership(this.membership)
+      ? OUTFITS.find((outfit) => outfit.id === this.membership.selectedOutfit)
+      : undefined;
+    const outfitUnlocked =
+      selectedOutfit
+      && storage.getMaxWorldUnlocked() >= selectedOutfit.unlockWorld;
+    this.player = new Player(
+      this,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT - 150,
+      outfitUnlocked ? selectedOutfit.textureKey : undefined,
+    );
     this.player.setDepth(5);
     this.combatBike = new CombatBike(this);
   }
@@ -415,6 +465,46 @@ export class GameScene extends Phaser.Scene {
       poseidon.fillRoundedRect(7, 17, 6, 45, 3);
       poseidon.generateTexture('bala-poseidon', 20, 66);
       poseidon.destroy();
+    }
+
+    if (!this.textures.exists('bala-plasma-neon')) {
+      const plasma = this.make.graphics({ x: 0, y: 0 }, false);
+      plasma.fillStyle(0x21e6c1, 0.28);
+      plasma.fillRoundedRect(0, 0, 24, 74, 12);
+      plasma.fillStyle(0xffffff, 1);
+      plasma.fillTriangle(12, 0, 2, 24, 22, 24);
+      plasma.fillStyle(0x21e6c1, 1);
+      plasma.fillRoundedRect(8, 18, 8, 52, 4);
+      plasma.generateTexture('bala-plasma-neon', 24, 74);
+      plasma.destroy();
+    }
+
+    if (!this.textures.exists('bala-misil-sabor')) {
+      const missile = this.make.graphics({ x: 0, y: 0 }, false);
+      missile.fillStyle(0xff7b24, 0.32);
+      missile.fillEllipse(25, 32, 48, 62);
+      missile.fillStyle(0xe6262b, 1);
+      missile.fillRoundedRect(10, 8, 30, 47, 14);
+      missile.fillStyle(0xffffff, 1);
+      missile.fillTriangle(25, 0, 10, 20, 40, 20);
+      missile.fillStyle(0xffd21e, 1);
+      missile.fillTriangle(10, 48, 0, 64, 18, 57);
+      missile.fillTriangle(40, 48, 50, 64, 32, 57);
+      missile.generateTexture('bala-misil-sabor', 50, 68);
+      missile.destroy();
+    }
+
+    if (!this.textures.exists('bala-rayo-vip')) {
+      const ray = this.make.graphics({ x: 0, y: 0 }, false);
+      ray.fillStyle(0x63e8ff, 0.3);
+      ray.fillRoundedRect(0, 0, 30, 92, 14);
+      ray.fillStyle(0xffffff, 1);
+      ray.fillTriangle(15, 0, 5, 48, 17, 42);
+      ray.fillTriangle(17, 38, 8, 92, 27, 32);
+      ray.lineStyle(3, 0x63e8ff, 1);
+      ray.strokeRoundedRect(2, 2, 26, 88, 12);
+      ray.generateTexture('bala-rayo-vip', 30, 92);
+      ray.destroy();
     }
 
     if (!this.textures.exists('ataque-fuego')) {
@@ -865,6 +955,125 @@ export class GameScene extends Phaser.Scene {
     this.input.on('gameout', () => this.clearTouchControls());
   }
 
+  private createMembershipControls(): void {
+    if (!hasActiveMembership(this.membership)) {
+      return;
+    }
+    const elite = isEliteMembership(this.membership);
+    const y = 318;
+    if (elite) {
+      this.premiumWeaponControl = this.makeVipAbilityButton(
+        105,
+        y,
+        '⚔ ARMA VIP',
+        0x8c35d8,
+        () => this.activatePremiumWeapon(),
+      );
+      this.elitePowerControl = this.makeVipAbilityButton(
+        360,
+        y,
+        '⚡ PODER 25%',
+        0xe6262b,
+        () => this.activateElitePower(),
+      );
+      this.premiumPlaneControl = this.makeVipAbilityButton(
+        615,
+        y,
+        '✈ AVION',
+        0x1450c8,
+        () => this.activatePremiumPlane(),
+      );
+    } else {
+      this.premiumWeaponControl = this.makeVipAbilityButton(
+        205,
+        y,
+        '⚔ ARMA VIP',
+        0x8c35d8,
+        () => this.activatePremiumWeapon(),
+      );
+      this.premiumPlaneControl = this.makeVipAbilityButton(
+        515,
+        y,
+        '✈ AVION',
+        0x1450c8,
+        () => this.activatePremiumPlane(),
+      );
+    }
+    this.updateMembershipControls();
+  }
+
+  private makeVipAbilityButton(
+    x: number,
+    y: number,
+    label: string,
+    color: number,
+    onPress: () => void,
+  ): VipAbilityControl {
+    const visual = this.add.container(x, y).setDepth(42).setScrollFactor(0);
+    const glow = this.add
+      .rectangle(0, 3, 196, 62, color, 0.18)
+      .setStrokeStyle(3, color, 0.35);
+    const button = this.add
+      .rectangle(0, 0, 188, 54, color, 0.94)
+      .setStrokeStyle(3, 0xffffff, 0.9)
+      .setInteractive({ useHandCursor: true });
+    const text = this.add
+      .text(0, 0, label, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '15px',
+        color: '#ffffff',
+        stroke: '#020718',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+    visual.add([glow, button, text]);
+    button.on('pointerdown', () => visual.setScale(0.95));
+    button.on('pointerup', () => {
+      visual.setScale(1);
+      this.triggerControlHaptic();
+      onPress();
+    });
+    button.on('pointerout', () => visual.setScale(1));
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.45, to: 1 },
+      duration: 850,
+      yoyo: true,
+      repeat: -1,
+    });
+    return { visual, label: text, button };
+  }
+
+  private updateMembershipControls(): void {
+    if (!hasActiveMembership(this.membership)) return;
+    const world = this.currentWorld.id;
+    const weaponActive = this.premiumWeaponActiveUntil > this.time.now;
+    const weaponUsed = this.premiumWeaponUsedWorlds.has(world);
+    if (this.premiumWeaponControl) {
+      const seconds = Math.max(0, Math.ceil((this.premiumWeaponActiveUntil - this.time.now) / 1000));
+      this.premiumWeaponControl.label.setText(
+        weaponActive ? `⚔ VIP ${seconds}s` : weaponUsed ? '⚔ USADA' : '⚔ ARMA VIP',
+      );
+      this.premiumWeaponControl.button.setAlpha(weaponUsed && !weaponActive ? 0.42 : 0.96);
+    }
+    const planeActive = this.premiumPlaneExpiresAt > this.time.now;
+    const planeUsed = this.premiumPlaneUsedWorlds.has(world);
+    if (this.premiumPlaneControl) {
+      const seconds = Math.max(0, Math.ceil((this.premiumPlaneExpiresAt - this.time.now) / 1000));
+      this.premiumPlaneControl.label.setText(
+        planeActive ? `✈ AVION ${seconds}s` : planeUsed ? '✈ USADO' : '✈ AVION',
+      );
+      this.premiumPlaneControl.button.setAlpha(planeUsed && !planeActive ? 0.42 : 0.96);
+    }
+    if (this.elitePowerControl) {
+      const used = this.elitePowerUsedWorlds.has(world);
+      this.elitePowerControl.label.setText(
+        used ? '⚡ USADO' : `⚡ PODER ${Math.round(this.elitePowerCharge)}%`,
+      );
+      this.elitePowerControl.button.setAlpha(used ? 0.42 : 0.96);
+    }
+  }
+
   private bindHoldControl(
     control: TouchControl,
     pointers: Set<number>,
@@ -1229,6 +1438,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
     this.player.update(delta);
+    this.updateMembershipAbilities();
     if (this.combatBike.update(this.player, delta)) {
       this.deactivateCombatBike(false);
     }
@@ -1572,7 +1782,13 @@ export class GameScene extends Phaser.Scene {
       .setScale(1, 1)
       .setVisible(true);
 
-    if (this.activeWeapon) {
+    if (this.premiumWeaponActiveUntil > this.time.now && hasActiveMembership(this.membership)) {
+      const weapon = PREMIUM_WEAPONS[this.membership.selectedWeapon];
+      const seconds = Math.max(0, Math.ceil((this.premiumWeaponActiveUntil - this.time.now) / 1000));
+      this.weaponText
+        .setText(`★ ${weapon.shortName} VIP  •  ${seconds}s`)
+        .setColor(weapon.colorHex);
+    } else if (this.activeWeapon) {
       this.weaponAmmo = Math.max(this.weaponAmmo, WEAPONS[this.activeWeapon].ammo);
     } else {
       this.equipStartingWeapon();
@@ -2140,11 +2356,12 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
+    const damage = weapon.damage;
     const hitX = projectile.x;
     const hitY = projectile.y;
     this.recycleProjectile(projectile);
     const defeated = this.general.takeHit(damage);
+    this.chargeElitePower(Math.max(3, damage * 2));
     this.updateGeneralHealthHud();
 
     try {
@@ -2154,6 +2371,7 @@ export class GameScene extends Phaser.Scene {
       console.error('Se omitió un efecto visual de daño al general.', error);
     }
     if (defeated) {
+      this.chargeElitePower(35);
       this.defeatGeneral();
     }
   }
@@ -2255,11 +2473,12 @@ export class GameScene extends Phaser.Scene {
       this.recycleProjectile(projectile);
       return;
     }
-    const damage = weaponType === 'historic' ? 3 : weaponType === 'poseidon' ? 2 : 1;
+    const damage = weapon.damage;
     const hitX = projectile.x;
     const hitY = projectile.y;
     this.recycleProjectile(projectile);
     const defeated = boss.takeHit(damage);
+    this.chargeElitePower(Math.max(3, damage * 2));
     this.updateBossHealthHud();
 
     try {
@@ -2405,6 +2624,12 @@ export class GameScene extends Phaser.Scene {
     const previousWorld = this.currentWorld;
     this.currentWorldIndex += 1;
     const nextWorld = this.currentWorld;
+    storage.unlockWorld(nextWorld.id);
+    this.premiumWeaponActiveUntil = 0;
+    this.premiumPlaneExpiresAt = 0;
+    this.premiumPlane?.destroy(true);
+    this.premiumPlane = undefined;
+    this.elitePowerCharge = 25;
     this.worldPaceStage = 0;
     this.nextEnemyIndex = 0;
     this.timeLeft = this.getBossArrivalSeconds();
@@ -2423,6 +2648,7 @@ export class GameScene extends Phaser.Scene {
       this.equipStartingWeapon();
     }
     this.updateHud();
+    this.updateMembershipControls();
     this.clearTouchControls();
     this.playWorldTransitionCinematic(previousWorld, nextWorld);
   }
@@ -3340,33 +3566,44 @@ export class GameScene extends Phaser.Scene {
     }
     hitEnemies?.add(enemy.spawnId);
 
-    if (weaponType === 'historic') {
+    if (weaponType === 'historic' || weaponType === 'misil-sabor') {
       const x = enemy.x;
       const y = enemy.y;
       this.recycleProjectile(projectile);
-      this.explodeEnemies(x, y);
+      this.explodeEnemies(
+        x,
+        y,
+        weaponType === 'misil-sabor' ? 195 : 145,
+        WEAPONS[weaponType].damage,
+        WEAPONS[weaponType].color,
+      );
       return;
     }
 
-    if (weaponType === 'modern') {
+    if (weaponType === 'modern' || weaponType === 'plasma-neon') {
       this.recycleProjectile(projectile);
     }
-    this.damageEnemy(enemy, 1);
+    this.damageEnemy(enemy, WEAPONS[weaponType]?.damage ?? 1);
   }
 
-  private explodeEnemies(x: number, y: number): void {
-    const radius = 145;
+  private explodeEnemies(
+    x: number,
+    y: number,
+    radius = 145,
+    damage = 2,
+    color = WEAPONS.historic.color,
+  ): void {
     this.enemies.children.each((child) => {
       const enemy = child as Enemy;
       if (
         enemy.active &&
         Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y) <= radius
       ) {
-        this.damageEnemy(enemy, 2);
+        this.damageEnemy(enemy, damage);
       }
       return true;
     });
-    this.emitShockwave(x, y, radius, WEAPONS.historic.color);
+    this.emitShockwave(x, y, radius, color);
   }
 
   private damageEnemy(enemy: Enemy, damage: number): void {
@@ -3387,6 +3624,7 @@ export class GameScene extends Phaser.Scene {
     const points = this.adjustPointsForDifficulty(basePoints);
     enemy.recycle();
     this.score += points;
+    this.chargeElitePower(18);
     this.showFloatingText(x, y, `+${points} • ${label}`, colorHex);
     this.emitSparkle(x, y, color);
     audioManager.play('combo');
@@ -3407,6 +3645,10 @@ export class GameScene extends Phaser.Scene {
 
   private tryFireWeapon(fromFreshPress = false): void {
     if (this.paused || this.gameOver || this.worldTransitioning) {
+      return;
+    }
+    if (this.premiumWeaponActiveUntil > this.time.now) {
+      this.tryFirePremiumWeapon(fromFreshPress);
       return;
     }
     if (!this.activeWeapon || this.weaponAmmo <= 0) {
@@ -3500,9 +3742,15 @@ export class GameScene extends Phaser.Scene {
     if (type === 'historic') {
       projectile.setDisplaySize(42, 42).setAngularVelocity(320);
       body.setCircle(projectile.width * 0.42);
-    } else if (type === 'poseidon') {
+    } else if (type === 'misil-sabor') {
+      projectile.setDisplaySize(50, 68).setAngle(0).setAngularVelocity(0);
+      body.setSize(projectile.width * 0.72, projectile.height * 0.82);
+    } else if (type === 'poseidon' || type === 'plasma-neon') {
       projectile.setDisplaySize(20, 66).setAngle(velocityX * 0.055).setAngularVelocity(0);
       body.setSize(projectile.width * 0.72, projectile.height * 0.86);
+    } else if (type === 'rayo-poseidon') {
+      projectile.setDisplaySize(24, 82).setAngle(0).setAngularVelocity(0);
+      body.setSize(projectile.width * 0.72, projectile.height * 0.9);
     } else {
       projectile.setDisplaySize(18, 54).setAngle(0).setAngularVelocity(0);
       body.setSize(projectile.width * 0.72, projectile.height * 0.86);
@@ -3518,11 +3766,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     const type = projectile.getData('weapon') as WeaponType;
-    if (type === 'historic') {
+    if (type === 'historic' || type === 'misil-sabor') {
       const x = item.x;
       const y = item.y;
       this.recycleProjectile(projectile);
-      this.explodeObstacles(x, y);
+      this.explodeObstacles(x, y, type === 'misil-sabor' ? 190 : 135, WEAPONS[type].color);
       return;
     }
 
@@ -3535,8 +3783,12 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private explodeObstacles(x: number, y: number): void {
-    const radius = 135;
+  private explodeObstacles(
+    x: number,
+    y: number,
+    radius = 135,
+    color = WEAPONS.historic.color,
+  ): void {
     let destroyed = 0;
     this.items.children.each((child) => {
       const target = child as FallingItem;
@@ -3545,13 +3797,13 @@ export class GameScene extends Phaser.Scene {
         target.definition.category === 'bad' &&
         Phaser.Math.Distance.Between(x, y, target.x, target.y) <= radius
       ) {
-        this.destroyObstacle(target, destroyed === 0 ? 100 : 75, WEAPONS.historic.color);
+        this.destroyObstacle(target, destroyed === 0 ? 100 : 75, color);
         destroyed += 1;
       }
       return true;
     });
 
-    this.emitShockwave(x, y, radius, WEAPONS.historic.color);
+    this.emitShockwave(x, y, radius, color);
     this.cameras.main.shake(110, 0.006);
   }
 
@@ -3632,6 +3884,275 @@ export class GameScene extends Phaser.Scene {
       .setPosition(this.player.x + 34 * facing, this.player.y - 79 + bob)
       .setFlipX(facing < 0)
       .setAngle((this.activeWeapon === 'poseidon' ? -10 : -5) * facing);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Membership abilities
+  // ---------------------------------------------------------------------------
+
+  private activatePremiumWeapon(): void {
+    if (
+      !hasActiveMembership(this.membership)
+      || this.gameOver
+      || this.worldTransitioning
+      || this.premiumWeaponUsedWorlds.has(this.currentWorld.id)
+    ) {
+      if (this.premiumWeaponUsedWorlds.has(this.currentWorld.id)) {
+        this.showFloatingText(this.player.x, this.player.y - 150, 'ARMA VIP YA USADA', '#9fdcff');
+      }
+      return;
+    }
+    this.premiumWeaponUsedWorlds.add(this.currentWorld.id);
+    this.premiumWeaponActiveUntil = this.time.now + 15_000;
+    this.nextShotAt = 0;
+    const weapon = PREMIUM_WEAPONS[this.membership.selectedWeapon];
+    this.showFloatingText(
+      this.player.x,
+      this.player.y - 165,
+      `${weapon.shortName} • 15 SEGUNDOS`,
+      weapon.colorHex,
+    );
+    this.emitShockwave(this.player.x, this.player.y - 80, 150, weapon.color);
+    audioManager.play('power');
+    this.updateMembershipControls();
+    this.updateHud();
+  }
+
+  private tryFirePremiumWeapon(fromFreshPress = false): void {
+    if (!hasActiveMembership(this.membership)) return;
+    const type = this.membership.selectedWeapon;
+    const weapon = WEAPONS[type];
+    if (!fromFreshPress && this.time.now < this.nextShotAt) return;
+    this.nextShotAt = this.time.now + weapon.cooldownMs;
+    const facing = this.player.getFacingDirection();
+    const muzzleX = this.player.x + 70 * facing;
+    const muzzleY = this.player.y - 102;
+    if (type === 'plasma-neon') {
+      this.spawnProjectile(muzzleX - 24, muzzleY + 4, type, -135);
+      this.spawnProjectile(muzzleX, muzzleY - 8, type, 0);
+      this.spawnProjectile(muzzleX + 24, muzzleY + 4, type, 135);
+    } else {
+      this.spawnProjectile(muzzleX, muzzleY, type, 0);
+    }
+    this.player.fireRecoil();
+    audioManager.play(type === 'misil-sabor' ? 'blast' : 'shot');
+    this.emitMuzzleFlash(muzzleX, muzzleY, weapon.color);
+  }
+
+  private activatePremiumPlane(): void {
+    if (
+      !hasActiveMembership(this.membership)
+      || this.gameOver
+      || this.worldTransitioning
+      || this.premiumPlaneUsedWorlds.has(this.currentWorld.id)
+    ) {
+      if (this.premiumPlaneUsedWorlds.has(this.currentWorld.id)) {
+        this.showFloatingText(this.player.x, this.player.y - 150, 'AVION YA USADO', '#9fdcff');
+      }
+      return;
+    }
+    this.premiumPlaneUsedWorlds.add(this.currentWorld.id);
+    this.premiumPlaneExpiresAt = this.time.now + 10_000;
+    this.nextPremiumPlaneShotAt = this.time.now + 120;
+    this.premiumPlane?.destroy(true);
+
+    const plane = this.add.container(this.player.x, this.player.y - 190).setDepth(14);
+    const halo = this.add
+      .ellipse(0, 18, 190, 76, 0x43d9ff, 0.18)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    const gfx = this.add.graphics();
+    gfx.fillStyle(0x123f74, 1);
+    gfx.fillTriangle(0, -70, -92, 50, 92, 50);
+    gfx.fillStyle(0x43d9ff, 1);
+    gfx.fillTriangle(0, -48, -38, 38, 38, 38);
+    gfx.fillStyle(0xffd21e, 1);
+    gfx.fillTriangle(-92, 50, -46, 28, -30, 53);
+    gfx.fillTriangle(92, 50, 46, 28, 30, 53);
+    gfx.fillStyle(0xffffff, 0.95);
+    gfx.fillCircle(0, -10, 12);
+    const label = this.add
+      .text(0, 20, 'DADDY AIR', {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '16px',
+        color: COLORS_HEX.yellow,
+        stroke: '#06143a',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
+    plane.add([halo, gfx, label]);
+    plane.setScale(0.72);
+    this.premiumPlane = plane;
+    this.showFloatingText(this.player.x, this.player.y - 225, 'AVION • 10 SEGUNDOS', '#43d9ff');
+    this.cameras.main.shake(160, 0.008);
+    audioManager.play('power');
+    this.updateMembershipControls();
+  }
+
+  private updateMembershipAbilities(): void {
+    if (!hasActiveMembership(this.membership)) return;
+    if (this.premiumWeaponActiveUntil > 0 && this.time.now >= this.premiumWeaponActiveUntil) {
+      this.premiumWeaponActiveUntil = 0;
+      this.updateHud();
+    }
+    if (this.premiumPlane && this.premiumPlaneExpiresAt > this.time.now) {
+      this.premiumPlane.x = Phaser.Math.Linear(this.premiumPlane.x, this.player.x, 0.15);
+      this.premiumPlane.y = this.player.y - 205 + Math.sin(this.time.now * 0.01) * 8;
+      if (this.time.now >= this.nextPremiumPlaneShotAt) {
+        this.nextPremiumPlaneShotAt = this.time.now + 300;
+        this.spawnProjectile(this.premiumPlane.x - 42, this.premiumPlane.y - 20, 'modern', -95);
+        this.spawnProjectile(this.premiumPlane.x + 42, this.premiumPlane.y - 20, 'modern', 95);
+        this.emitMuzzleFlash(this.premiumPlane.x, this.premiumPlane.y - 25, 0x43d9ff);
+      }
+    } else if (this.premiumPlane) {
+      this.premiumPlane.destroy(true);
+      this.premiumPlane = undefined;
+      this.premiumPlaneExpiresAt = 0;
+      this.showFloatingText(this.player.x, this.player.y - 190, 'AVION AGOTADO', '#9fdcff');
+    }
+    this.updateMembershipControls();
+  }
+
+  private chargeElitePower(amount: number): void {
+    if (!isEliteMembership(this.membership) || this.elitePowerUsedWorlds.has(this.currentWorld.id)) {
+      return;
+    }
+    const previous = this.elitePowerCharge;
+    this.elitePowerCharge = Phaser.Math.Clamp(this.elitePowerCharge + amount, 0, 100);
+    if (previous < 100 && this.elitePowerCharge >= 100) {
+      this.showFloatingText(this.player.x, this.player.y - 185, '¡PODER ELITE LISTO!', COLORS_HEX.yellow);
+      audioManager.play('power');
+    }
+    this.updateMembershipControls();
+  }
+
+  private activateElitePower(): void {
+    if (
+      !isEliteMembership(this.membership)
+      || this.gameOver
+      || this.worldTransitioning
+      || this.elitePowerUsedWorlds.has(this.currentWorld.id)
+    ) {
+      return;
+    }
+    if (this.elitePowerCharge < 100) {
+      this.showFloatingText(
+        this.player.x,
+        this.player.y - 160,
+        `PODER ${Math.round(this.elitePowerCharge)}%`,
+        '#9fdcff',
+      );
+      return;
+    }
+
+    this.elitePowerUsedWorlds.add(this.currentWorld.id);
+    this.elitePowerCharge = 0;
+    const cycle = (this.currentWorld.id - 1) % 3;
+    const powerName = cycle === 0 ? 'RAYOS DEL CIELO' : cycle === 1 ? 'FUEGO ARRASADOR' : 'TERREMOTO DADDY';
+    const color = cycle === 0 ? 0x9ffcff : cycle === 1 ? 0xff5428 : 0xffd21e;
+    const bossDamage = cycle === 0 ? 10 : cycle === 1 ? 12 : 14;
+
+    this.items.children.each((child) => {
+      const item = child as FallingItem;
+      if (item.active && item.definition.category === 'bad') {
+        this.destroyObstacle(item, 85, color);
+      }
+      return true;
+    });
+    this.enemies.children.each((child) => {
+      const enemy = child as Enemy;
+      if (enemy.active) this.damageEnemy(enemy, 99);
+      return true;
+    });
+    this.enemyProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) this.recycleEnemyProjectile(projectile);
+      return true;
+    });
+    this.bossProjectiles.children.each((child) => {
+      const projectile = child as Phaser.Physics.Arcade.Image;
+      if (projectile.active) this.recycleEnemyProjectile(projectile);
+      return true;
+    });
+
+    let defeatedGeneral = false;
+    if (this.generalActive && this.general.active) {
+      defeatedGeneral = this.general.takeHit(bossDamage);
+      this.updateGeneralHealthHud();
+    }
+    const defeatedBosses: Boss[] = [];
+    if (this.bossActive) {
+      for (const boss of this.getEncounterBosses()) {
+        if (boss.active && boss.takeHit(bossDamage)) defeatedBosses.push(boss);
+      }
+      const encounterBosses = this.getEncounterBosses();
+      const totalRatio = encounterBosses.reduce((sum, boss) => sum + boss.healthRatio, 0);
+      this.bossHealthFill.setScale(totalRatio / Math.max(1, encounterBosses.length), 1);
+    }
+
+    this.showElitePowerEffect(powerName, color, cycle);
+    this.updateMembershipControls();
+    if (defeatedGeneral) {
+      this.time.delayedCall(450, () => this.defeatGeneral());
+    } else if (defeatedBosses.length > 0) {
+      const encounterFinished = this.getEncounterBosses().every(
+        (encounterBoss) => encounterBoss.healthRatio <= 0,
+      );
+      if (encounterFinished) {
+        this.time.delayedCall(450, () => this.defeatBoss());
+      } else {
+        defeatedBosses.forEach((boss) => this.retireDefeatedBoss(boss));
+      }
+    }
+  }
+
+  private showElitePowerEffect(name: string, color: number, cycle: number): void {
+    const title = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, name, {
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        fontSize: '52px',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+        stroke: '#020718',
+        strokeThickness: 9,
+        align: 'center',
+      })
+      .setOrigin(0.5)
+      .setDepth(70);
+    const flash = this.add
+      .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, color, 0.34)
+      .setOrigin(0)
+      .setDepth(65);
+    if (cycle === 0) {
+      for (let x = 85; x < GAME_WIDTH; x += 138) {
+        const bolt = this.add.rectangle(x, 320, 13, 640, 0xffffff, 0.9).setDepth(66).setAngle(8);
+        this.tweens.add({ targets: bolt, alpha: 0, duration: 420, onComplete: () => bolt.destroy() });
+      }
+    } else if (cycle === 2) {
+      this.cameras.main.shake(850, 0.035);
+    } else {
+      const fire = this.add.particles(GAME_WIDTH / 2, GAME_HEIGHT - 210, '__WHITE', {
+        x: { min: -GAME_WIDTH / 2, max: GAME_WIDTH / 2 },
+        speedY: { min: -520, max: -220 },
+        speedX: { min: -80, max: 80 },
+        scale: { start: 1.1, end: 0 },
+        lifespan: 900,
+        quantity: 55,
+        tint: [0xffd21e, 0xff5428, 0xe6262b],
+        blendMode: 'ADD',
+      }).setDepth(66);
+      this.time.delayedCall(950, () => fire.destroy());
+    }
+    this.tweens.add({
+      targets: [title, flash],
+      alpha: 0,
+      scale: 1.18,
+      duration: 900,
+      ease: 'Cubic.out',
+      onComplete: () => {
+        title.destroy();
+        flash.destroy();
+      },
+    });
+    audioManager.play('blast');
   }
 
   // ---------------------------------------------------------------------------
@@ -3742,6 +4263,7 @@ export class GameScene extends Phaser.Scene {
       this.weaponText.setText('🎯 ATRAPA UN ARMA').setColor('#9fdcff');
     }
     this.updatePowerHud();
+    this.updateMembershipControls();
   }
 
   private showFloatingText(x: number, y: number, message: string, color: string): void {
@@ -3891,6 +4413,10 @@ export class GameScene extends Phaser.Scene {
     this.dragPointerId = null;
     this.pauseOverlay = undefined;
     this.equippedWeaponSprite = undefined;
+    this.premiumPlane = undefined;
+    this.premiumWeaponControl = undefined;
+    this.premiumPlaneControl = undefined;
+    this.elitePowerControl = undefined;
     this.worldTransitionOverlay = undefined;
     this.worldTransitionTrail = undefined;
   }

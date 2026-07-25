@@ -26,18 +26,30 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private hasAnimationSheet: boolean;
   private animationPrefix = 'daddy';
   private usingIntegratedBlaster = false;
+  private readonly customOutfitTexture: string | null;
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, outfitTexture?: string) {
     const armedTexture = scene.textures.exists('daddy-pollo-armed-anim');
     const animatedTexture = scene.textures.exists('daddy-pollo-anim');
-    const textureKey = armedTexture
+    const customOutfitTexture =
+      outfitTexture && outfitTexture !== 'daddy-pollo' && scene.textures.exists(outfitTexture)
+        ? outfitTexture
+        : null;
+    const textureKey = customOutfitTexture ?? (armedTexture
       ? 'daddy-pollo-armed-anim'
       : animatedTexture
         ? 'daddy-pollo-anim'
-        : 'daddy-pollo';
-    super(scene, x, y, textureKey, armedTexture || animatedTexture ? 0 : undefined);
-    this.hasAnimationSheet = armedTexture || animatedTexture;
-    this.usingIntegratedBlaster = armedTexture;
+        : 'daddy-pollo');
+    super(
+      scene,
+      x,
+      y,
+      textureKey,
+      !customOutfitTexture && (armedTexture || animatedTexture) ? 0 : undefined,
+    );
+    this.customOutfitTexture = customOutfitTexture;
+    this.hasAnimationSheet = !customOutfitTexture && (armedTexture || animatedTexture);
+    this.usingIntegratedBlaster = !customOutfitTexture && armedTexture;
     this.animationPrefix = armedTexture ? 'daddy-armed' : 'daddy';
     this.groundY = y;
     scene.add.existing(this);
@@ -48,7 +60,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     this.setOrigin(0.5, 0.9);
-    const displaySize = this.hasAnimationSheet ? 172 : 120;
+    const displaySize = this.hasAnimationSheet || customOutfitTexture ? 172 : 120;
     this.setDisplaySize(displaySize, displaySize);
     this.baseScaleX = this.scaleX;
     this.baseScaleY = this.scaleY;
@@ -228,6 +240,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   setIntegratedBlaster(active: boolean): void {
+    if (this.customOutfitTexture) {
+      this.usingIntegratedBlaster = false;
+      return;
+    }
     const armedAvailable = this.scene.textures.exists('daddy-pollo-armed-anim');
     const nextIntegrated = active && armedAvailable;
     const nextTexture = nextIntegrated ? 'daddy-pollo-armed-anim' : 'daddy-pollo-anim';

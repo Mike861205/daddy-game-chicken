@@ -69,6 +69,28 @@ export class PreloadScene extends Phaser.Scene {
       'daddy-pollo-pwa',
       'assets/icons/daddy-pollo-pwa.png?v=pwa-icon-20260724',
     );
+    for (const skin of [
+      'skin-comandante-neon',
+      'skin-rey-sabor',
+      'skin-guardian-omega',
+      'skin-fenix-elemental',
+    ]) {
+      this.load.image(skin, `${imageBase}/${skin}.png?v=membership-20260725`);
+    }
+    for (const rewardAsset of [
+      'vip-tridente-plasma',
+      'vip-misil-sabor',
+      'vip-rayo-poseidon',
+      'avion-daddy',
+      'poder-rayos-cielo',
+      'poder-fuego-arrasador',
+      'poder-terremoto-daddy',
+    ]) {
+      this.load.image(
+        rewardAsset,
+        `${imageBase}/${rewardAsset}.png?v=membership-rewards-20260725`,
+      );
+    }
   }
 
   async create(): Promise<void> {
@@ -88,7 +110,22 @@ export class PreloadScene extends Phaser.Scene {
     window.setTimeout(() => loadingScreen?.remove(), 650);
 
     this.scale.refresh();
-    this.scene.start(SCENES.Menu);
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('membership') === 'success') {
+      const requestedPlan = query.get('plan');
+      const storedPlan = sessionStorage.getItem('dgc.pendingMembershipPlan');
+      const planId = requestedPlan === 'daddy-elite' || requestedPlan === 'daddy-plus'
+        ? requestedPlan
+        : storedPlan === 'daddy-elite'
+          ? 'daddy-elite'
+          : 'daddy-plus';
+      this.scene.start(SCENES.MembershipWelcome, {
+        planId,
+        sessionId: query.get('session_id') ?? '',
+      });
+    } else {
+      this.scene.start(SCENES.Menu);
+    }
   }
 
   private animateHtmlProgress(): void {

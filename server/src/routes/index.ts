@@ -9,6 +9,11 @@ import {
 } from '../controllers/gameSession.controller.js';
 import { createReward, validateReward } from '../controllers/reward.controller.js';
 import { lookupPlayer } from '../controllers/player.controller.js';
+import {
+  createMembershipCheckoutHandler,
+  confirmMembershipCheckoutHandler,
+  getMembershipStatusHandler,
+} from '../controllers/membership.controller.js';
 
 const router = Router();
 
@@ -20,6 +25,19 @@ router.get('/config/public', asyncHandler(getPublicConfiguration));
 
 // Players
 router.get('/players/lookup', asyncHandler(lookupPlayer));
+
+// Memberships
+router.get('/memberships/status', asyncHandler(getMembershipStatusHandler));
+router.post(
+  '/memberships/checkout',
+  writeRateLimiter,
+  asyncHandler(createMembershipCheckoutHandler),
+);
+router.post(
+  '/memberships/confirm',
+  writeRateLimiter,
+  asyncHandler(confirmMembershipCheckoutHandler),
+);
 
 // Game sessions
 router.post('/game-sessions', writeRateLimiter, asyncHandler(submitGameSession));

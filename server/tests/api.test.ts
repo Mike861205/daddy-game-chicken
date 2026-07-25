@@ -11,6 +11,16 @@ const prismaMock = {
   gameSession: {
     findMany: vi.fn(),
   },
+  player: {
+    findFirst: vi.fn(),
+    update: vi.fn(),
+    create: vi.fn(),
+  },
+  membership: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    upsert: vi.fn(),
+  },
 };
 
 vi.mock('../src/config/prisma.js', () => ({
@@ -24,6 +34,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   prismaMock.gameConfiguration.findUnique.mockResolvedValue(null);
   prismaMock.gameConfiguration.upsert.mockResolvedValue({});
+  prismaMock.player.findFirst.mockResolvedValue(null);
+  prismaMock.player.create.mockResolvedValue({
+    id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+  });
+  prismaMock.player.update.mockResolvedValue({
+    id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+  });
+  prismaMock.membership.upsert.mockResolvedValue({});
   prismaMock.$transaction.mockImplementation(async (operations) => Promise.all(operations));
 });
 
@@ -242,5 +260,44 @@ describe('GET /api/config/public', () => {
     expect(response.body.data.difficultyLevel).toBe(5);
     expect(response.body.data.campaign).toEqual({ bossArrivalSeconds: 120, worldCount: 5 });
     expect(Array.isArray(response.body.data.branches)).toBe(true);
+  });
+});
+
+describe('Membership API', () => {
+  it('returns no active membership for an unknown player', async () => {
+    const response = await request(app).get(
+      '/api/memberships/status?phone=6241234567',
+    );
+    expect(response.status).toBe(200);
+    expect(response.body.data.membership).toMatchObject({
+      planId: null,
+      status: 'none',
+    });
+  });
+
+  it('registers the player and returns the selected Stripe Payment Link', async () => {
+    prismaMock.player.findFirst.mockResolvedValue({
+      id: '4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+      name: 'Daddy Demo',
+    });
+    const response = await request(app).post('/api/memberships/checkout').send({
+      planId: 'daddy-plus',
+      phone: '6241234567',
+      name: 'Daddy Demo',
+      avatar: 'DaddyMaster',
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.data.productId).toBe('prod_Ux7hZ0O7sUc0hJ');
+    expect(response.body.data.url).toContain(
+      'https://buy.stripe.com/00w14m8bz5bPb4n8Q64c80k',
+    );
+    expect(response.body.data.url).toContain(
+      'client_reference_id=4c22f8bc-b48a-4de0-8b07-2a4b12bf5f58',
+    );
+    expect(prismaMock.membership.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ status: 'INCOMPLETE' }),
+      }),
+    );
   });
 });

@@ -14,6 +14,13 @@ export interface RegistrationDefaults {
   branch?: string;
 }
 
+export interface RegistrationPresentation {
+  title?: string;
+  subtitle?: string;
+  submitLabel?: string;
+  hint?: string;
+}
+
 /** Remove any stale registration layer left behind by a reload or scene change. */
 export function removeRegistrationOverlays(): void {
   document.querySelectorAll<HTMLElement>('.dgc-overlay').forEach((overlay) => overlay.remove());
@@ -39,6 +46,7 @@ function resolveInitialBranch(branches: Branch[], requested?: string): string {
 export function showRegistrationForm(
   branches: Branch[],
   defaults: RegistrationDefaults = {},
+  presentation: RegistrationPresentation = {},
 ): Promise<RegistrationData | null> {
   return new Promise((resolve) => {
     removeRegistrationOverlays();
@@ -57,8 +65,10 @@ export function showRegistrationForm(
     overlay.innerHTML = `
       <div class="dgc-card" role="dialog" aria-modal="true">
         <div class="dgc-card__header">
-          <div class="dgc-card__title">¡ANTES DE JUGAR!</div>
-          <div class="dgc-card__subtitle">Regístrate para competir</div>
+          <div class="dgc-card__title">${escapeHtml(presentation.title ?? '¡ANTES DE JUGAR!')}</div>
+          <div class="dgc-card__subtitle">${escapeHtml(
+            presentation.subtitle ?? 'Regístrate para competir',
+          )}</div>
         </div>
         <form class="dgc-card__body" novalidate autocomplete="off">
           <div class="dgc-field">
@@ -90,9 +100,13 @@ export function showRegistrationForm(
 
           <div class="dgc-actions">
             <button type="button" class="dgc-btn dgc-btn--ghost" id="dgc-cancel">✕</button>
-            <button type="submit" class="dgc-btn dgc-btn--primary" id="dgc-submit">JUGAR</button>
+            <button type="submit" class="dgc-btn dgc-btn--primary" id="dgc-submit">${escapeHtml(
+              presentation.submitLabel ?? 'JUGAR',
+            )}</button>
           </div>
-          <div class="dgc-hint">Solo usamos estos datos para tu puntaje y promociones.</div>
+          <div class="dgc-hint">${escapeHtml(
+            presentation.hint ?? 'Solo usamos estos datos para tu puntaje y promociones.',
+          )}</div>
         </form>
       </div>
     `;

@@ -20,10 +20,59 @@ model Player {
   updatedAt DateTime @updatedAt
 
   sessions GameSession[]
+  membership Membership?
 
   @@index([nickname])
   @@index([phone])
   @@map("players")
+}
+
+enum MembershipPlan {
+  DADDY_PLUS
+  DADDY_ELITE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+model Membership {
+  id                   String           @id @default(uuid()) @db.Uuid
+  playerId             String           @unique @db.Uuid
+  plan                 MembershipPlan
+  pendingPlan          MembershipPlan?
+  status               MembershipStatus @default(INCOMPLETE)
+  stripeCustomerId     String?          @unique
+  stripeSubscriptionId String?          @unique
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean          @default(false)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  player          Player                     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  monthlyBenefits MembershipMonthlyBenefit[]
+
+  @@index([status])
+  @@index([plan])
+  @@map("memberships")
+}
+
+model MembershipMonthlyBenefit {
+  id           String   @id @default(uuid()) @db.Uuid
+  membershipId String   @db.Uuid
+  period       String
+  code         String   @unique
+  redeemedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, period])
+  @@index([code])
+  @@map("membership_monthly_benefits")
 }
 
 model GameSession {

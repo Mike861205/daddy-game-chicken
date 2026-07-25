@@ -38,6 +38,8 @@ export const SCENES = {
   Menu: 'MenuScene',
   Instructions: 'InstructionsScene',
   Install: 'InstallScene',
+  Membership: 'MembershipScene',
+  MembershipWelcome: 'MembershipWelcomeScene',
   Game: 'GameScene',
   Result: 'ResultScene',
   Leaderboard: 'LeaderboardScene',
@@ -54,4 +56,5 @@ export const REGISTRY = {
   nickname: 'nickname',
   playerName: 'playerName',
   playerPhone: 'playerPhone',
+  membership: 'membership',
 } as const;

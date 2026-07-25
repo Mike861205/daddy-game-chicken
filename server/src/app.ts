@@ -6,6 +6,8 @@ import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import apiRoutes from './routes/index.js';
 import adminRoutes from './routes/admin.routes.js';
+import { asyncHandler } from './middleware/asyncHandler.js';
+import { stripeWebhookHandler } from './controllers/membership.controller.js';
 
 export function createApp(): Express {
   const app = express();
@@ -30,6 +32,14 @@ export function createApp(): Express {
       methods: ['GET', 'POST', 'PUT'],
       credentials: true,
     }),
+  );
+
+  // Stripe signature verification requires the untouched request body. This
+  // route must remain before express.json().
+  app.post(
+    '/api/memberships/webhook',
+    express.raw({ type: 'application/json' }),
+    asyncHandler(stripeWebhookHandler),
   );
 
   // Body parsing with a strict size limit.

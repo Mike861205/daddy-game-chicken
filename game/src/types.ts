@@ -1,4 +1,5 @@
 import type { PowerType } from './config/items.js';
+import type { MembershipEntitlement } from './config/memberships.js';
 
 export interface Branch {
   id: string;
@@ -91,4 +92,8 @@ export interface RewardResponse {
 export interface ActivePower {
   power: PowerType;
   expiresAt: number;
+}
+
+export interface MembershipStatusResponse {
+  membership: MembershipEntitlement;
 }

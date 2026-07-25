@@ -6,6 +6,11 @@ import type {
   RewardResponse,
   SubmitResponse,
 } from '../types.js';
+import type {
+  MembershipEntitlement,
+  MembershipPlanId,
+} from '../config/memberships.js';
+import { EMPTY_MEMBERSHIP } from '../config/memberships.js';
 
 /**
  * API base URL. In development Vite proxies /api to the backend.
@@ -160,5 +165,45 @@ export const api = {
     } catch {
       return null;
     }
+  },
+  async getMembershipStatus(phone: string): Promise<MembershipEntitlement> {
+    if (!phone) return { ...EMPTY_MEMBERSHIP };
+    try {
+      const response = await request<{ data: { membership: MembershipEntitlement } }>(
+        `/memberships/status?phone=${encodeURIComponent(phone)}`,
+      );
+      return response.data.membership;
+    } catch {
+      return { ...EMPTY_MEMBERSHIP };
+    }
+  },
+  async createMembershipCheckout(
+    planId: MembershipPlanId,
+    registration: {
+      name: string;
+      avatar: string;
+      phone: string;
+    },
+  ): Promise<{ url: string; playerId: string; productId: string }> {
+    const response = await request<{
+      data: { url: string; playerId: string; productId: string };
+    }>('/memberships/checkout', {
+      method: 'POST',
+      body: JSON.stringify({ planId, ...registration }),
+    });
+    return response.data;
+  },
+  async confirmMembershipCheckout(
+    sessionId: string,
+    phone: string,
+  ): Promise<MembershipEntitlement> {
+    const response = await request<{ data: { membership: MembershipEntitlement } }>(
+      '/memberships/confirm',
+      {
+        method: 'POST',
+        body: JSON.stringify({ sessionId, phone }),
+      },
+    );
+    return response.data.membership;
   },
 };

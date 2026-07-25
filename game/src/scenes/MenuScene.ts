@@ -82,48 +82,56 @@ export class MenuScene extends Phaser.Scene {
     createTitle(this, cx, 458, 'ATRAPA EL SABOR', 38, '#ffffff');
 
     // Main buttons.
-    createButton(this, cx, 570, 'JUGAR', () => void this.openRegistration(), {
+    createButton(this, cx, 530, 'JUGAR', () => void this.openRegistration(), {
       width: 500,
-      height: 78,
-      fontSize: 34,
+      height: 68,
+      fontSize: 31,
       fillColor: COLORS.red,
       textColor: '#ffffff',
       glowColor: 0xff2748,
     });
-    createButton(this, cx, 670, '¿YA JUGASTE ANTES?', () => void this.openReturning(), {
+    createButton(this, cx, 612, '¿YA JUGASTE ANTES?', () => void this.openReturning(), {
       width: 500,
-      height: 74,
-      fontSize: 27,
+      height: 66,
+      fontSize: 25,
       fillColor: COLORS.green,
       textColor: '#ffffff',
       glowColor: 0x39ff6e,
     });
-    createButton(this, cx, 770, 'CÓMO JUGAR', () => this.scene.start(SCENES.Instructions), {
+    createButton(this, cx, 694, 'JUEGA CON MEMBRESÍA', () => this.scene.start(SCENES.Membership), {
       width: 500,
-      height: 76,
-      fontSize: 30,
+      height: 66,
+      fontSize: 25,
+      fillColor: 0x8c35d8,
+      textColor: '#ffffff',
       glowColor: COLORS.yellow,
     });
-    createButton(this, cx, 870, 'MEJORES PUNTAJES', () => this.scene.start(SCENES.Leaderboard), {
+    createButton(this, cx, 776, 'CÓMO JUGAR', () => this.scene.start(SCENES.Instructions), {
       width: 500,
-      height: 76,
-      fontSize: 28,
+      height: 66,
+      fontSize: 26,
+      glowColor: COLORS.yellow,
+    });
+    createButton(this, cx, 858, 'MEJORES PUNTAJES', () => this.scene.start(SCENES.Leaderboard), {
+      width: 500,
+      height: 66,
+      fontSize: 25,
       glowColor: 0x43d9ff,
     });
-    createButton(this, cx, 965, 'DESCARGA LA APP', () => this.openInstallModule(), {
+    createButton(this, cx, 940, 'DESCARGA LA APP', () => this.openInstallModule(), {
       width: 500,
-      height: 70,
-      fontSize: 27,
+      height: 66,
+      fontSize: 24,
       fillColor: 0x6f46d9,
       textColor: '#ffffff',
       glowColor: 0xb66cff,
     });
 
     // Sound toggle.
-    this.createSoundToggle(cx, 1055);
+    this.createSoundToggle(cx, 1022);
 
     const arsenalBadge = this.add
-      .text(cx, 1132, '⚔ NUEVO COMBATE: CORRE • DISPARA • CÚBRETE', {
+      .text(cx, 1093, '⚔ NUEVO COMBATE: CORRE • DISPARA • CÚBRETE', {
         fontFamily: 'Trebuchet MS, Arial, sans-serif',
         fontSize: '17px',
         fontStyle: 'bold',
@@ -430,7 +438,7 @@ export class MenuScene extends Phaser.Scene {
   }
 
   /** Persist the player info and start the game. */
-  private startWithPlayer(data: RegistrationData): void {
+  private async startWithPlayer(data: RegistrationData): Promise<void> {
     if (this.transitioning) {
       return;
     }
@@ -447,6 +455,21 @@ export class MenuScene extends Phaser.Scene {
     removeRegistrationOverlays();
     this.input.enabled = false;
     this.scale.refresh();
+    const cachedMembership = storage.getMembership();
+    if (cachedMembership) {
+      this.registry.set(REGISTRY.membership, cachedMembership);
+    }
+    const membership = await api.getMembershipStatus(data.phone);
+    if (
+      membership.status !== 'none' ||
+      !import.meta.env.DEV ||
+      cachedMembership?.status !== 'active'
+    ) {
+      membership.selectedOutfit = storage.getSelectedOutfit();
+      membership.selectedWeapon = storage.getSelectedWeapon();
+      storage.setMembership(membership);
+      this.registry.set(REGISTRY.membership, membership);
+    }
     this.scene.start(SCENES.Game);
   }
 

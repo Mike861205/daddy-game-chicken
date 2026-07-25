@@ -8,6 +8,8 @@ import { GameScene } from './scenes/GameScene.js';
 import { ResultScene } from './scenes/ResultScene.js';
 import { LeaderboardScene } from './scenes/LeaderboardScene.js';
 import { InstallScene } from './scenes/InstallScene.js';
+import { MembershipScene } from './scenes/MembershipScene.js';
+import { MembershipWelcomeScene } from './scenes/MembershipWelcomeScene.js';
 import { pwaManager } from './services/pwa.js';
 import './styles/main.css';
 
@@ -64,6 +66,8 @@ const config: Phaser.Types.Core.GameConfig = {
     MenuScene,
     InstructionsScene,
     InstallScene,
+    MembershipScene,
+    MembershipWelcomeScene,
     GameScene,
     ResultScene,
     LeaderboardScene,

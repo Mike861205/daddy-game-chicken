@@ -7,7 +7,13 @@ export type ItemCategory = 'good' | 'bad' | 'power' | 'weapon';
 
 export type PowerType = 'shield' | 'double' | 'slow' | 'magnet' | 'combo' | 'combatBike';
 
-export type WeaponType = 'modern' | 'historic' | 'poseidon';
+export type WeaponType =
+  | 'modern'
+  | 'historic'
+  | 'poseidon'
+  | 'plasma-neon'
+  | 'misil-sabor'
+  | 'rayo-poseidon';
 
 export interface ItemDefinition {
   key: string;

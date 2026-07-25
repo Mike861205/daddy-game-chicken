@@ -31,6 +31,20 @@ const envSchema = z.object({
   DEPLOY_BRANCH: z.string().regex(/^[A-Za-z0-9._/-]+$/u).default('main'),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(60),
+  STRIPE_SECRET_KEY: z.string().optional().default(''),
+  STRIPE_WEBHOOK_SECRET: z.string().optional().default(''),
+  STRIPE_PRICE_DADDY_PLUS: z.string().optional().default(''),
+  STRIPE_PRICE_DADDY_ELITE: z.string().optional().default(''),
+  STRIPE_PAYMENT_LINK_DADDY_PLUS: z
+    .string()
+    .url()
+    .default('https://buy.stripe.com/00w14m8bz5bPb4n8Q64c80k'),
+  STRIPE_PAYMENT_LINK_DADDY_ELITE: z
+    .string()
+    .url()
+    .default('https://buy.stripe.com/14A28qajH8o1b4n1nE4c80j'),
+  STRIPE_PRODUCT_DADDY_PLUS: z.string().default('prod_Ux7hZ0O7sUc0hJ'),
+  STRIPE_PRODUCT_DADDY_ELITE: z.string().default('prod_Ux7iNXegfFKWbU'),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -71,6 +85,14 @@ export const env = {
   deployBranch: data.DEPLOY_BRANCH,
   rateLimitWindowMs: data.RATE_LIMIT_WINDOW_MS,
   rateLimitMax: data.RATE_LIMIT_MAX,
+  stripeSecretKey: data.STRIPE_SECRET_KEY,
+  stripeWebhookSecret: data.STRIPE_WEBHOOK_SECRET,
+  stripePriceDaddyPlus: data.STRIPE_PRICE_DADDY_PLUS,
+  stripePriceDaddyElite: data.STRIPE_PRICE_DADDY_ELITE,
+  stripePaymentLinkDaddyPlus: data.STRIPE_PAYMENT_LINK_DADDY_PLUS,
+  stripePaymentLinkDaddyElite: data.STRIPE_PAYMENT_LINK_DADDY_ELITE,
+  stripeProductDaddyPlus: data.STRIPE_PRODUCT_DADDY_PLUS,
+  stripeProductDaddyElite: data.STRIPE_PRODUCT_DADDY_ELITE,
   isProduction: data.NODE_ENV === 'production',
   isTest: data.NODE_ENV === 'test',
 };

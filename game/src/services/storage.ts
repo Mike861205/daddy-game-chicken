@@ -7,6 +7,10 @@ const KEYS = {
   nickname: 'dgc.nickname',
   branch: 'dgc.branch',
   playerPhone: 'dgc.playerPhone',
+  membership: 'dgc.membership',
+  selectedOutfit: 'dgc.membership.outfit',
+  selectedWeapon: 'dgc.membership.weapon',
+  maxWorldUnlocked: 'dgc.membership.maxWorld',
 };
 
 function safeGet(key: string): string | null {
@@ -59,5 +63,42 @@ export const storage = {
   },
   setPlayerPhone(phone: string): void {
     safeSet(KEYS.playerPhone, phone);
+  },
+  getMembership(): import('../config/memberships.js').MembershipEntitlement | null {
+    const value = safeGet(KEYS.membership);
+    if (!value) return null;
+    try {
+      return JSON.parse(value) as import('../config/memberships.js').MembershipEntitlement;
+    } catch {
+      return null;
+    }
+  },
+  setMembership(
+    membership: import('../config/memberships.js').MembershipEntitlement,
+  ): void {
+    safeSet(KEYS.membership, JSON.stringify(membership));
+  },
+  getSelectedOutfit(): import('../config/memberships.js').OutfitId {
+    return (safeGet(KEYS.selectedOutfit) as import('../config/memberships.js').OutfitId | null)
+      ?? 'clasico';
+  },
+  setSelectedOutfit(outfit: import('../config/memberships.js').OutfitId): void {
+    safeSet(KEYS.selectedOutfit, outfit);
+  },
+  getSelectedWeapon(): import('../config/memberships.js').PremiumWeaponId {
+    return (safeGet(KEYS.selectedWeapon) as import('../config/memberships.js').PremiumWeaponId | null)
+      ?? 'plasma-neon';
+  },
+  setSelectedWeapon(weapon: import('../config/memberships.js').PremiumWeaponId): void {
+    safeSet(KEYS.selectedWeapon, weapon);
+  },
+  getMaxWorldUnlocked(): number {
+    const value = safeGet(KEYS.maxWorldUnlocked);
+    return value ? Math.max(1, Number.parseInt(value, 10) || 1) : 1;
+  },
+  unlockWorld(world: number): void {
+    if (world > this.getMaxWorldUnlocked()) {
+      safeSet(KEYS.maxWorldUnlocked, String(world));
+    }
   },
 };
