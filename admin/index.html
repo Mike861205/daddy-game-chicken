@@ -61,6 +61,10 @@
               <span class="sidebar-item__icon">◎</span>
               <span><b>Informes</b><small>Jugadores y actividad</small></span>
             </button>
+            <button class="sidebar-item" type="button" data-module="memberships">
+              <span class="sidebar-item__icon">◆</span>
+              <span><b>Membresías</b><small>Plus, Elite y actividad</small></span>
+            </button>
             <button class="sidebar-item" type="button" data-module="game">
               <span class="sidebar-item__icon">⚙</span>
               <span><b>Configuración</b><small>Juego y campaña</small></span>
@@ -94,6 +98,7 @@
             </section>
             <section class="module-shortcuts" aria-label="Accesos rápidos">
               <button type="button" data-open-module="reports"><span>◎</span><b>Ver informes</b><small>Jugadores, horas y premios</small></button>
+              <button type="button" data-open-module="memberships"><span>◆</span><b>Ver membresías</b><small>Inscritos Plus, Elite y rendimiento</small></button>
               <button type="button" data-open-module="game"><span>⚙</span><b>Configurar juego</b><small>Dificultad, contacto y campaña</small></button>
               <button type="button" data-open-module="rewards"><span>★</span><b>Administrar premios</b><small>Niveles, puntos y descuentos</small></button>
               <button type="button" data-open-module="deployment"><span>⇧</span><b>Publicar cambios</b><small>Push y despliegue seguro</small></button>
@@ -196,6 +201,107 @@
             <strong id="report-page">Página 1 de 1</strong>
             <button id="report-next" class="button button--ghost" type="button">Siguiente →</button>
           </div>
+            </section>
+          </div>
+
+          <div class="module-panel" data-module-panel="memberships" hidden>
+            <section class="panel memberships-panel">
+              <div class="panel__heading panel__heading--split">
+                <div class="heading-group">
+                  <div class="panel__icon panel__icon--memberships">◆</div>
+                  <div>
+                    <p class="eyebrow">COMUNIDAD DE MEMBRESÍAS</p>
+                    <h2>Daddy Plus y Daddy Elite</h2>
+                  </div>
+                </div>
+                <button id="membership-refresh" class="button button--secondary" type="button">↻ Actualizar</button>
+              </div>
+              <p class="section-help memberships-help">
+                Consulta cada inscripción, su estado de cobro y toda su actividad de juego.
+                Los registros Plus se identifican con oro y los Elite con diamante.
+              </p>
+
+              <div class="membership-metrics" aria-live="polite">
+                <article class="membership-metric membership-metric--total">
+                  <span>Inscripciones</span><strong id="membership-metric-total">—</strong><small>todos los estados</small>
+                </article>
+                <article class="membership-metric membership-metric--active">
+                  <span>Activas</span><strong id="membership-metric-active">—</strong><small>beneficios vigentes</small>
+                </article>
+                <article class="membership-metric membership-metric--plus">
+                  <span>Daddy Plus</span><strong id="membership-metric-plus">—</strong><small>oro activo</small>
+                </article>
+                <article class="membership-metric membership-metric--elite">
+                  <span>Daddy Elite</span><strong id="membership-metric-elite">—</strong><small>diamante activo</small>
+                </article>
+                <article class="membership-metric membership-metric--revenue">
+                  <span>Mensual estimado</span><strong id="membership-metric-revenue">—</strong><small>MXN en planes activos</small>
+                </article>
+                <article class="membership-metric membership-metric--games">
+                  <span>Partidas</span><strong id="membership-metric-games">—</strong><small>de miembros</small>
+                </article>
+                <article class="membership-metric membership-metric--hours">
+                  <span>Horas jugadas</span><strong id="membership-metric-hours">—</strong><small>tiempo acumulado</small>
+                </article>
+                <article class="membership-metric membership-metric--points">
+                  <span>Puntos totales</span><strong id="membership-metric-points">—</strong><small>rendimiento acumulado</small>
+                </article>
+              </div>
+
+              <div class="membership-filters">
+                <label class="field membership-search-field">
+                  <span>Buscar miembro</span>
+                  <input id="membership-search" type="search" maxlength="80" placeholder="Avatar, nombre o teléfono" />
+                </label>
+                <label class="field">
+                  <span>Plan</span>
+                  <select id="membership-plan-filter">
+                    <option value="all">Todos los planes</option>
+                    <option value="DADDY_PLUS">Daddy Plus</option>
+                    <option value="DADDY_ELITE">Daddy Elite</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Estado</span>
+                  <select id="membership-status-filter">
+                    <option value="all">Todos los estados</option>
+                    <option value="ACTIVE">Activa</option>
+                    <option value="PAST_DUE">Pago pendiente</option>
+                    <option value="INCOMPLETE">Inscripción incompleta</option>
+                    <option value="CANCELED">Cancelada</option>
+                  </select>
+                </label>
+                <button id="membership-apply" class="button button--primary" type="button">Aplicar filtros</button>
+              </div>
+
+              <div class="report-table-shell membership-table-shell">
+                <table class="report-table membership-table">
+                  <thead>
+                    <tr>
+                      <th><button type="button" data-membership-sort="joinedAt">Inscripción <i></i></button></th>
+                      <th><button type="button" data-membership-sort="plan">Plan <i></i></button></th>
+                      <th><button type="button" data-membership-sort="status">Estado <i></i></button></th>
+                      <th><button type="button" data-membership-sort="nickname">Avatar <i></i></button></th>
+                      <th><button type="button" data-membership-sort="name">Nombre <i></i></button></th>
+                      <th><button type="button" data-membership-sort="phone">Teléfono <i></i></button></th>
+                      <th><button type="button" data-membership-sort="gameCount">Partidas <i></i></button></th>
+                      <th><button type="button" data-membership-sort="totalDurationSeconds">Horas <i></i></button></th>
+                      <th><button type="button" data-membership-sort="totalPoints">Puntos <i></i></button></th>
+                      <th><button type="button" data-membership-sort="bestScore">Récord <i></i></button></th>
+                      <th><button type="button" data-membership-sort="lastPlayedAt">Última partida <i></i></button></th>
+                      <th>Renovación</th>
+                      <th>Beneficio mensual</th>
+                    </tr>
+                  </thead>
+                  <tbody id="membership-players-body"></tbody>
+                </table>
+              </div>
+              <p id="membership-report-status" class="report-status" role="status">Cargando membresías…</p>
+              <div class="report-pagination">
+                <button id="membership-previous" class="button button--ghost" type="button">← Anterior</button>
+                <strong id="membership-page">Página 1 de 1</strong>
+                <button id="membership-next" class="button button--ghost" type="button">Siguiente →</button>
+              </div>
             </section>
           </div>
 

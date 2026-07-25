@@ -20,7 +20,13 @@ interface AdminConfig {
 }
 
 type DeploymentState = 'idle' | 'running' | 'succeeded' | 'failed';
-type AdminModule = 'overview' | 'reports' | 'game' | 'rewards' | 'deployment';
+type AdminModule =
+  | 'overview'
+  | 'reports'
+  | 'memberships'
+  | 'game'
+  | 'rewards'
+  | 'deployment';
 
 interface DeploymentStatus {
   enabled: boolean;
@@ -80,6 +86,60 @@ interface PlayerReport {
   };
 }
 
+type MembershipSortBy =
+  | 'joinedAt'
+  | 'plan'
+  | 'status'
+  | 'nickname'
+  | 'name'
+  | 'phone'
+  | 'gameCount'
+  | 'totalDurationSeconds'
+  | 'totalPoints'
+  | 'bestScore'
+  | 'lastPlayedAt';
+
+interface MembershipReportRow {
+  id: string;
+  joinedAt: string;
+  updatedAt: string;
+  name: string | null;
+  nickname: string;
+  phone: string | null;
+  plan: 'DADDY_PLUS' | 'DADDY_ELITE';
+  status: 'ACTIVE' | 'PAST_DUE' | 'CANCELED' | 'INCOMPLETE';
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  gameCount: number;
+  totalDurationSeconds: number;
+  totalPoints: number;
+  bestScore: number;
+  lastPlayedAt: string | null;
+  benefitsGenerated: number;
+  benefitsRedeemed: number;
+}
+
+interface MembershipReport {
+  summary: {
+    totalMembers: number;
+    activeMembers: number;
+    plusMembers: number;
+    eliteMembers: number;
+    attentionMembers: number;
+    monthlyRevenue: number;
+    totalSessions: number;
+    totalDurationSeconds: number;
+    totalPoints: number;
+  };
+  members: MembershipReportRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    totalMembers: number;
+    totalPages: number;
+  };
+}
+
 const loginView = required<HTMLElement>('login-view');
 const adminView = required<HTMLElement>('admin-view');
 const loginForm = required<HTMLFormElement>('login-form');
@@ -114,6 +174,14 @@ const reportStatus = required<HTMLElement>('report-status');
 const reportPage = required<HTMLElement>('report-page');
 const reportPrevious = required<HTMLButtonElement>('report-previous');
 const reportNext = required<HTMLButtonElement>('report-next');
+const membershipSearch = required<HTMLInputElement>('membership-search');
+const membershipPlanFilter = required<HTMLSelectElement>('membership-plan-filter');
+const membershipStatusFilter = required<HTMLSelectElement>('membership-status-filter');
+const membershipPlayersBody = required<HTMLTableSectionElement>('membership-players-body');
+const membershipReportStatus = required<HTMLElement>('membership-report-status');
+const membershipPage = required<HTMLElement>('membership-page');
+const membershipPrevious = required<HTMLButtonElement>('membership-previous');
+const membershipNext = required<HTMLButtonElement>('membership-next');
 const adminSidebar = required<HTMLElement>('admin-sidebar');
 const sidebarToggle = required<HTMLButtonElement>('sidebar-toggle');
 const sidebarBackdrop = required<HTMLButtonElement>('sidebar-backdrop');
@@ -128,10 +196,16 @@ let reportTotalPages = 1;
 let reportSortBy: ReportSortBy = 'lastPlayedAt';
 let reportSortOrder: 'asc' | 'desc' = 'desc';
 let reportRequestSequence = 0;
+let membershipCurrentPage = 1;
+let membershipTotalPages = 1;
+let membershipSortBy: MembershipSortBy = 'joinedAt';
+let membershipSortOrder: 'asc' | 'desc' = 'desc';
+let membershipRequestSequence = 0;
 
 const moduleLabels: Record<AdminModule, string> = {
   overview: 'Inicio',
   reports: 'Informes',
+  memberships: 'Membresías',
   game: 'Configuración',
   rewards: 'Premios',
   deployment: 'Despliegue',
@@ -161,6 +235,7 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
 function moduleFromHash(): AdminModule {
   const value = window.location.hash.replace(/^#/u, '');
   if (value === 'player-reports') return 'reports';
+  if (value === 'membership-reports') return 'memberships';
   return value in moduleLabels ? (value as AdminModule) : 'overview';
 }
 
@@ -197,6 +272,9 @@ function activateModule(module: AdminModule, updateHash = true): void {
   if (module === 'reports' && reportPlayersBody.children.length === 0) {
     void loadPlayerReports();
   }
+  if (module === 'memberships' && membershipPlayersBody.children.length === 0) {
+    void loadMembershipReports();
+  }
 }
 
 function showLogin(): void {
@@ -216,7 +294,11 @@ async function showAdmin(): Promise<void> {
   updateBossArrivalPreview(currentConfig.bossArrivalSeconds);
   setDifficulty(currentConfig.difficultyLevel);
   renderTiers();
-  await Promise.all([loadDeploymentModule(), loadPlayerReports()]);
+  await Promise.all([
+    loadDeploymentModule(),
+    loadPlayerReports(),
+    loadMembershipReports(),
+  ]);
   activateModule(moduleFromHash(), false);
 }
 
@@ -507,6 +589,146 @@ async function loadPlayerReports(): Promise<void> {
   }
 }
 
+function membershipPlanLabel(plan: MembershipReportRow['plan']): string {
+  return plan === 'DADDY_ELITE' ? 'DADDY ELITE' : 'DADDY PLUS';
+}
+
+function membershipStatusLabel(status: MembershipReportRow['status']): string {
+  return {
+    ACTIVE: 'Activa',
+    PAST_DUE: 'Pago pendiente',
+    CANCELED: 'Cancelada',
+    INCOMPLETE: 'Incompleta',
+  }[status];
+}
+
+function renderMembershipSortState(): void {
+  document.querySelectorAll<HTMLButtonElement>('[data-membership-sort]').forEach((button) => {
+    const active = button.dataset.membershipSort === membershipSortBy;
+    button.classList.toggle('is-active', active);
+    const indicator = button.querySelector('i');
+    if (indicator) {
+      indicator.textContent = active
+        ? membershipSortOrder === 'asc' ? '↑' : '↓'
+        : '↕';
+    }
+    button.closest('th')?.setAttribute(
+      'aria-sort',
+      active ? membershipSortOrder === 'asc' ? 'ascending' : 'descending' : 'none',
+    );
+  });
+}
+
+function renderMembershipReport(report: MembershipReport): void {
+  const { summary, pagination } = report;
+  required<HTMLElement>('membership-metric-total').textContent =
+    summary.totalMembers.toLocaleString('es-MX');
+  required<HTMLElement>('membership-metric-active').textContent =
+    summary.activeMembers.toLocaleString('es-MX');
+  required<HTMLElement>('membership-metric-plus').textContent =
+    summary.plusMembers.toLocaleString('es-MX');
+  required<HTMLElement>('membership-metric-elite').textContent =
+    summary.eliteMembers.toLocaleString('es-MX');
+  required<HTMLElement>('membership-metric-revenue').textContent =
+    `$${summary.monthlyRevenue.toLocaleString('es-MX')}`;
+  required<HTMLElement>('membership-metric-games').textContent =
+    summary.totalSessions.toLocaleString('es-MX');
+  required<HTMLElement>('membership-metric-hours').textContent =
+    formatMetricHours(summary.totalDurationSeconds);
+  required<HTMLElement>('membership-metric-points').textContent =
+    summary.totalPoints.toLocaleString('es-MX');
+
+  membershipPlayersBody.innerHTML = report.members
+    .map((member) => {
+      const elite = member.plan === 'DADDY_ELITE';
+      const initial = (member.nickname.trim()[0] ?? '?').toUpperCase();
+      const planBadge = `
+        <span class="membership-plan-badge ${elite ? 'is-elite' : 'is-plus'}">
+          <i>${elite ? '◆' : '★'}</i>${membershipPlanLabel(member.plan)}
+        </span>`;
+      const statusBadge = `
+        <span class="membership-status-badge is-${member.status.toLowerCase()}">
+          ${membershipStatusLabel(member.status)}
+        </span>`;
+      const renewal = member.currentPeriodEnd
+        ? `${member.cancelAtPeriodEnd ? 'Termina' : 'Renueva'} ${formatReportDate(member.currentPeriodEnd)}`
+        : member.status === 'ACTIVE' ? 'Activa sin fecha' : 'Pendiente';
+      const benefit = elite
+        ? member.benefitsGenerated > 0
+          ? `${member.benefitsRedeemed}/${member.benefitsGenerated} canjeados`
+          : 'Disponible cada mes'
+        : '10% de descuento';
+      return `
+        <tr class="${elite ? 'membership-row--elite' : 'membership-row--plus'}">
+          <td data-label="Inscripción">${formatReportDate(member.joinedAt)}</td>
+          <td data-label="Plan">${planBadge}</td>
+          <td data-label="Estado">${statusBadge}</td>
+          <td data-label="Avatar"><span class="player-avatar membership-avatar ${elite ? 'is-elite' : 'is-plus'}" style="--avatar-color:${avatarColor(member.nickname)}">${escapeHtml(initial)}</span><strong class="avatar-name">${escapeHtml(member.nickname)}</strong></td>
+          <td data-label="Nombre">${escapeHtml(member.name || '—')}</td>
+          <td data-label="Teléfono">${member.phone ? `<a href="tel:${escapeHtml(member.phone)}">${escapeHtml(member.phone)}</a>` : '—'}</td>
+          <td data-label="Partidas"><b>${member.gameCount.toLocaleString('es-MX')}</b></td>
+          <td data-label="Horas">${formatDuration(member.totalDurationSeconds)}</td>
+          <td data-label="Puntos"><b class="member-total-points">${member.totalPoints.toLocaleString('es-MX')}</b></td>
+          <td data-label="Récord"><b class="best-score">${member.bestScore.toLocaleString('es-MX')}</b></td>
+          <td data-label="Última partida">${formatReportDate(member.lastPlayedAt)}</td>
+          <td data-label="Renovación"><span class="renewal-copy">${renewal}</span></td>
+          <td data-label="Beneficio"><span class="benefit-copy">${benefit}</span></td>
+        </tr>`;
+    })
+    .join('');
+
+  if (report.members.length === 0) {
+    membershipPlayersBody.innerHTML =
+      '<tr><td class="report-empty" colspan="13">No hay membresías para los filtros seleccionados.</td></tr>';
+  }
+
+  membershipCurrentPage = pagination.page;
+  membershipTotalPages = pagination.totalPages;
+  membershipPage.textContent =
+    `Página ${pagination.page} de ${pagination.totalPages} · ${pagination.totalMembers.toLocaleString('es-MX')} inscripciones`;
+  membershipPrevious.disabled = pagination.page <= 1;
+  membershipNext.disabled = pagination.page >= pagination.totalPages;
+  membershipReportStatus.textContent =
+    report.members.length > 0
+      ? `Mostrando ${report.members.length} membresías en esta página.`
+      : 'Sin resultados para estos filtros.';
+  renderMembershipSortState();
+}
+
+async function loadMembershipReports(): Promise<void> {
+  const requestId = ++membershipRequestSequence;
+  membershipReportStatus.className = 'report-status is-loading';
+  membershipReportStatus.textContent = 'Consultando miembros y actividad…';
+  membershipPrevious.disabled = true;
+  membershipNext.disabled = true;
+
+  try {
+    const params = new URLSearchParams({
+      page: String(membershipCurrentPage),
+      sortBy: membershipSortBy,
+      sortOrder: membershipSortOrder,
+      plan: membershipPlanFilter.value,
+      status: membershipStatusFilter.value,
+    });
+    if (membershipSearch.value.trim()) {
+      params.set('search', membershipSearch.value.trim());
+    }
+    const report = await api<MembershipReport>(
+      `/reports/memberships?${params.toString()}`,
+    );
+    if (requestId !== membershipRequestSequence) return;
+    membershipReportStatus.className = 'report-status';
+    renderMembershipReport(report);
+  } catch (error) {
+    if (requestId !== membershipRequestSequence) return;
+    membershipReportStatus.className = 'report-status report-status--error';
+    membershipReportStatus.textContent =
+      error instanceof Error ? error.message : 'No se pudo cargar el módulo de membresías.';
+    membershipPlayersBody.innerHTML =
+      '<tr><td class="report-empty" colspan="13">No fue posible cargar las membresías.</td></tr>';
+  }
+}
+
 function renderTiers(): void {
   if (!currentConfig) return;
   tiersList.innerHTML = '';
@@ -766,6 +988,49 @@ reportNext.addEventListener('click', () => {
   }
 });
 
+required<HTMLButtonElement>('membership-apply').addEventListener('click', () => {
+  membershipCurrentPage = 1;
+  void loadMembershipReports();
+});
+required<HTMLButtonElement>('membership-refresh').addEventListener('click', () => {
+  void loadMembershipReports();
+});
+membershipSearch.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    membershipCurrentPage = 1;
+    void loadMembershipReports();
+  }
+});
+document.querySelectorAll<HTMLButtonElement>('[data-membership-sort]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const sort = button.dataset.membershipSort as MembershipSortBy;
+    if (sort === membershipSortBy) {
+      membershipSortOrder = membershipSortOrder === 'asc' ? 'desc' : 'asc';
+    } else {
+      membershipSortBy = sort;
+      membershipSortOrder =
+        sort === 'nickname' || sort === 'name' || sort === 'phone' || sort === 'plan'
+          ? 'asc'
+          : 'desc';
+    }
+    membershipCurrentPage = 1;
+    void loadMembershipReports();
+  });
+});
+membershipPrevious.addEventListener('click', () => {
+  if (membershipCurrentPage > 1) {
+    membershipCurrentPage -= 1;
+    void loadMembershipReports();
+  }
+});
+membershipNext.addEventListener('click', () => {
+  if (membershipCurrentPage < membershipTotalPages) {
+    membershipCurrentPage += 1;
+    void loadMembershipReports();
+  }
+});
+
 required<HTMLButtonElement>('logout-button').addEventListener('click', async () => {
   stopDeploymentPolling();
   await api<{ authenticated: boolean }>('/logout', { method: 'POST', body: '{}' });
@@ -775,6 +1040,7 @@ required<HTMLButtonElement>('logout-button').addEventListener('click', async () 
 initializeReportDates();
 updateReportPeriodControls();
 renderReportSortState();
+renderMembershipSortState();
 
 void (async () => {
   try {

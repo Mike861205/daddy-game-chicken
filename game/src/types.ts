@@ -56,6 +56,7 @@ export interface LeaderboardEntry {
   selectedBranch: string;
   createdAt: string;
   premium: boolean;
+  membershipPlan: 'daddy-plus' | 'daddy-elite' | null;
 }
 
 export interface LeaderboardPage {

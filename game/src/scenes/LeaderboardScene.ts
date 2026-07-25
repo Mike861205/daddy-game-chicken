@@ -262,20 +262,26 @@ export class LeaderboardScene extends Phaser.Scene {
     if (!this.listContainer) {
       return;
     }
-    const premium = entry.premium || entry.rank <= 10;
+    const elite = entry.membershipPlan === 'daddy-elite';
+    const plus = entry.membershipPlan === 'daddy-plus';
+    const podium = entry.premium || entry.rank <= 10;
+    const highlighted = elite || plus || podium;
+    const rowColor = elite ? 0x552aa8 : plus ? 0xa86f00 : podium ? COLORS.yellow : COLORS.blue;
+    const borderColor = elite ? 0x8cecff : plus ? COLORS.yellow : COLORS.white;
     const row = this.add.graphics();
-    row.fillStyle(premium ? COLORS.yellow : COLORS.blue, premium ? 0.95 : 0.55);
+    row.fillStyle(rowColor, highlighted ? 0.95 : 0.55);
     row.fillRoundedRect(32, y - 31, GAME_WIDTH - 64, 62, 13);
-    if (premium) {
-      row.lineStyle(2, COLORS.white, 0.85);
+    if (highlighted) {
+      row.lineStyle(elite || plus ? 3 : 2, borderColor, 0.9);
       row.strokeRoundedRect(32, y - 31, GAME_WIDTH - 64, 62, 13);
     }
 
-    const textColor = premium ? COLORS_HEX.blue : '#ffffff';
+    const textColor = podium && !elite && !plus ? COLORS_HEX.blue : '#ffffff';
+    const rankIcon = elite ? '◆' : plus ? '★' : podium ? '♛' : '';
     const rankText = this.add
-      .text(70, y, premium ? `♛ ${entry.rank}` : `${entry.rank}`, {
+      .text(70, y, rankIcon ? `${rankIcon} ${entry.rank}` : `${entry.rank}`, {
         fontFamily: 'Arial Black',
-        fontSize: premium ? '21px' : '23px',
+        fontSize: highlighted ? '20px' : '23px',
         color: textColor,
       })
       .setOrigin(0.5);
@@ -285,7 +291,11 @@ export class LeaderboardScene extends Phaser.Scene {
     const avatarCircle = this.add.graphics();
     avatarCircle.fillStyle(avatarColor, 1);
     avatarCircle.fillCircle(avatarX, y, 23);
-    avatarCircle.lineStyle(2, premium ? COLORS.red : COLORS.yellow, 1);
+    avatarCircle.lineStyle(
+      3,
+      elite ? 0xbda7ff : plus ? COLORS.yellow : podium ? COLORS.red : COLORS.yellow,
+      1,
+    );
     avatarCircle.strokeCircle(avatarX, y, 23);
     const initial = (entry.nickname.trim()[0] ?? '?').toUpperCase();
     const avatarInitial = this.add
@@ -299,20 +309,25 @@ export class LeaderboardScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const nameText = this.add
-      .text(170, premium ? y - 8 : y, entry.nickname, {
+      .text(170, highlighted ? y - 8 : y, entry.nickname, {
         fontFamily: 'Arial Black',
         fontSize: '22px',
         color: textColor,
         wordWrap: { width: 285 },
       })
       .setOrigin(0, 0.5);
-    const premiumText = premium
+    const membershipText = highlighted
       ? this.add
-          .text(170, y + 16, 'PREMIUM', {
-            fontFamily: 'Arial Black',
-            fontSize: '11px',
-            color: COLORS_HEX.red,
-          })
+          .text(
+            170,
+            y + 16,
+            elite ? '◆ DADDY ELITE' : plus ? '★ DADDY PLUS' : 'TOP 10',
+            {
+              fontFamily: 'Arial Black',
+              fontSize: '11px',
+              color: elite ? '#d9c9ff' : plus ? '#fff0a6' : COLORS_HEX.red,
+            },
+          )
           .setOrigin(0, 0.5)
       : undefined;
 
@@ -320,7 +335,13 @@ export class LeaderboardScene extends Phaser.Scene {
       .text(GAME_WIDTH - 54, y, entry.score.toLocaleString('es-MX'), {
         fontFamily: 'Arial Black',
         fontSize: '25px',
-        color: premium ? COLORS_HEX.red : COLORS_HEX.yellow,
+        color: elite
+          ? '#8cecff'
+          : plus
+            ? '#fff0a6'
+            : podium
+              ? COLORS_HEX.red
+              : COLORS_HEX.yellow,
       })
       .setOrigin(1, 0.5);
 
@@ -330,7 +351,7 @@ export class LeaderboardScene extends Phaser.Scene {
       avatarCircle,
       avatarInitial,
       nameText,
-      ...(premiumText ? [premiumText] : []),
+      ...(membershipText ? [membershipText] : []),
       scoreText,
     ]);
   }

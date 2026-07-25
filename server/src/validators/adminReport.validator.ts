@@ -39,3 +39,32 @@ export const adminPlayerReportQuerySchema = z
   });
 
 export type AdminPlayerReportQuery = z.infer<typeof adminPlayerReportQuerySchema>;
+
+export const adminMembershipReportQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  search: z.string().trim().max(80).default(''),
+  plan: z.enum(['all', 'DADDY_PLUS', 'DADDY_ELITE']).default('all'),
+  status: z
+    .enum(['all', 'ACTIVE', 'PAST_DUE', 'CANCELED', 'INCOMPLETE'])
+    .default('all'),
+  sortBy: z
+    .enum([
+      'joinedAt',
+      'plan',
+      'status',
+      'nickname',
+      'name',
+      'phone',
+      'gameCount',
+      'totalDurationSeconds',
+      'totalPoints',
+      'bestScore',
+      'lastPlayedAt',
+    ])
+    .default('joinedAt'),
+  sortOrder: z.enum(['asc', 'desc']).default('desc'),
+});
+
+export type AdminMembershipReportQuery = z.infer<
+  typeof adminMembershipReportQuerySchema
+>;

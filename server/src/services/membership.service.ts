@@ -320,6 +320,14 @@ export async function handleStripeWebhook(
   }
 
   if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    if (
+      session.payment_status === 'paid'
+      || session.payment_status === 'no_payment_required'
+    ) {
+      await upsertCheckoutMembership(session);
+    }
+  } else if (event.type === 'checkout.session.async_payment_succeeded') {
     await upsertCheckoutMembership(event.data.object);
   } else if (
     event.type === 'customer.subscription.created'

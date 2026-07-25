@@ -208,6 +208,64 @@ describe('Super Admin', () => {
     );
     expect(response.status).toBe(400);
   });
+
+  it('returns a separate membership roster with engagement metrics', async () => {
+    const agent = request.agent(app);
+    await agent.post('/api/admin/login').send({ username: 'mike', password: 'mike1986' });
+    const now = new Date();
+    prismaMock.$queryRaw
+      .mockResolvedValueOnce([
+        {
+          totalMembers: 1,
+          activeMembers: 1,
+          plusMembers: 0,
+          eliteMembers: 1,
+          attentionMembers: 0,
+          monthlyRevenue: 149,
+          totalSessions: 4,
+          totalDurationSeconds: 3600,
+          totalPoints: 24_500,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 'membership-1',
+          joinedAt: now,
+          updatedAt: now,
+          name: 'Ana López',
+          nickname: 'DaddyAna',
+          phone: '6241234567',
+          plan: 'DADDY_ELITE',
+          status: 'ACTIVE',
+          currentPeriodEnd: now,
+          cancelAtPeriodEnd: false,
+          gameCount: 4,
+          totalDurationSeconds: 3600,
+          totalPoints: 24_500,
+          bestScore: 9_200,
+          lastPlayedAt: now,
+          benefitsGenerated: 1,
+          benefitsRedeemed: 0,
+        },
+      ]);
+
+    const response = await agent.get(
+      '/api/admin/reports/memberships?plan=DADDY_ELITE&status=ACTIVE',
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.summary).toMatchObject({
+      totalMembers: 1,
+      eliteMembers: 1,
+      monthlyRevenue: 149,
+    });
+    expect(response.body.data.members[0]).toMatchObject({
+      nickname: 'DaddyAna',
+      plan: 'DADDY_ELITE',
+      gameCount: 4,
+      totalPoints: 24_500,
+    });
+  });
 });
 
 describe('GET /api/health', () => {
@@ -236,6 +294,7 @@ describe('GET /api/leaderboard', () => {
         selectedBranch: 'san-jose',
         createdAt: new Date(),
         totalEntries: 1,
+        membershipPlan: 'DADDY_ELITE',
       },
     ]);
     const response = await request(app).get('/api/leaderboard');
@@ -243,6 +302,7 @@ describe('GET /api/leaderboard', () => {
     expect(response.body.data).toHaveLength(1);
     expect(response.body.data[0].rank).toBe(1);
     expect(response.body.data[0].premium).toBe(true);
+    expect(response.body.data[0].membershipPlan).toBe('daddy-elite');
     expect(response.body.pagination.pageSize).toBe(50);
   });
 

@@ -14,6 +14,11 @@ import { storage } from '../services/storage.js';
 import { removeRegistrationOverlays } from '../services/registrationForm.js';
 import type { GameResult, PublicConfig, RewardResponse } from '../types.js';
 import { buildWhatsAppUrl } from '../utils/whatsapp.js';
+import {
+  hasActiveMembership,
+  isEliteMembership,
+  type MembershipEntitlement,
+} from '../config/memberships.js';
 
 /**
  * ResultScene: shows the final score, personal best, promotion, and actions.
@@ -55,13 +60,34 @@ export class ResultScene extends Phaser.Scene {
 
     const cx = GAME_WIDTH / 2;
     createTitle(this, cx, 120, '¡FIN DEL JUEGO!', 46);
+    const membership = this.registry.get(REGISTRY.membership) as
+      | MembershipEntitlement
+      | undefined;
+    const elite = isEliteMembership(membership);
+    const plus = hasActiveMembership(membership) && !elite;
+    if (elite || plus) {
+      const badgeColor = elite ? 0x552aa8 : 0x8a6200;
+      const badgeAccent = elite ? 0x8cecff : COLORS.yellow;
+      this.add
+        .rectangle(cx, 58, 260, 42, badgeColor, 0.98)
+        .setStrokeStyle(3, badgeAccent, 1);
+      this.add
+        .text(cx, 58, elite ? '◆ DADDY ELITE' : '★ DADDY PLUS', {
+          fontFamily: 'Arial Black, sans-serif',
+          fontSize: '17px',
+          color: '#ffffff',
+          stroke: '#020718',
+          strokeThickness: 3,
+        })
+        .setOrigin(0.5);
+    }
 
     // Score.
     this.add
-      .text(cx, 230, `${this.result.score}`, {
+      .text(cx, 230, `${elite ? '◆ ' : plus ? '★ ' : ''}${this.result.score}`, {
         fontFamily: 'Arial Black',
         fontSize: '110px',
-        color: COLORS_HEX.yellow,
+        color: elite ? '#8cecff' : COLORS_HEX.yellow,
         stroke: '#000000',
         strokeThickness: 8,
       })

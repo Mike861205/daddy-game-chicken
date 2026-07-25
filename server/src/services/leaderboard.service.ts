@@ -9,6 +9,7 @@ export interface LeaderboardEntry {
   selectedBranch: string;
   createdAt: Date;
   premium: boolean;
+  membershipPlan: 'daddy-plus' | 'daddy-elite' | null;
 }
 
 export interface LeaderboardPage {
@@ -22,11 +23,13 @@ export interface LeaderboardPage {
 }
 
 interface LeaderboardRow {
+  playerId: string | null;
   nickname: string;
   score: number;
   selectedBranch: string;
   createdAt: Date;
   totalEntries: number;
+  membershipPlan: 'DADDY_PLUS' | 'DADDY_ELITE' | null;
 }
 
 /**
@@ -42,6 +45,7 @@ export async function getLeaderboard(query: LeaderboardQuery): Promise<Leaderboa
   const rows = await prisma.$queryRaw<LeaderboardRow[]>(Prisma.sql`
     WITH ranked_sessions AS (
       SELECT
+        "playerId",
         "nickname",
         "score",
         "selectedBranch",
@@ -58,6 +62,7 @@ export async function getLeaderboard(query: LeaderboardQuery): Promise<Leaderboa
     ),
     personal_bests AS (
       SELECT
+        "playerId",
         "nickname",
         "score",
         "selectedBranch",
@@ -67,19 +72,24 @@ export async function getLeaderboard(query: LeaderboardQuery): Promise<Leaderboa
       WHERE "personalRank" = 1
     )
     SELECT
-      "nickname",
-      "score",
-      "selectedBranch",
-      "createdAt",
-      "totalEntries"
-    FROM personal_bests
-    ORDER BY "score" DESC, "createdAt" ASC
+      pb."playerId",
+      pb."nickname",
+      pb."score",
+      pb."selectedBranch",
+      pb."createdAt",
+      pb."totalEntries",
+      m."plan" AS "membershipPlan"
+    FROM personal_bests pb
+    LEFT JOIN "memberships" m
+      ON m."playerId" = pb."playerId"
+      AND m."status" = 'ACTIVE'
+    ORDER BY pb."score" DESC, pb."createdAt" ASC
     LIMIT ${query.limit}
     OFFSET ${offset}
   `);
 
   const totalEntries = rows[0]?.totalEntries ?? 0;
-  const entries = rows.map((session, index) => {
+  const entries: LeaderboardEntry[] = rows.map((session, index) => {
     const rank = offset + index + 1;
     return {
       rank,
@@ -88,6 +98,12 @@ export async function getLeaderboard(query: LeaderboardQuery): Promise<Leaderboa
       selectedBranch: session.selectedBranch,
       createdAt: session.createdAt,
       premium: rank <= 10,
+      membershipPlan:
+        session.membershipPlan === 'DADDY_ELITE'
+          ? 'daddy-elite'
+          : session.membershipPlan === 'DADDY_PLUS'
+            ? 'daddy-plus'
+            : null,
     };
   });
 

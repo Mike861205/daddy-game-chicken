@@ -32,6 +32,7 @@ import {
   hasActiveMembership,
   isEliteMembership,
   type MembershipEntitlement,
+  type PremiumWeaponId,
 } from '../config/memberships.js';
 import { Boss } from '../objects/Boss.js';
 import { CombatBike } from '../objects/CombatBike.js';
@@ -224,12 +225,21 @@ export class GameScene extends Phaser.Scene {
     this.equipStartingWeapon();
     this.createTouchControls();
     this.createMembershipControls();
+    this.createMembershipIdentity();
     this.createKeyboardControls();
     this.createPauseButton();
     this.setupVisibilityPause();
 
-    this.startTimers();
-    this.showCountdownStart();
+    if (hasActiveMembership(this.membership)) {
+      this.time.delayedCall(3250, () => {
+        if (!this.scene.isActive()) return;
+        this.startTimers();
+        this.showCountdownStart();
+      });
+    } else {
+      this.startTimers();
+      this.showCountdownStart();
+    }
 
     // Clean up listeners and timers when the scene shuts down.
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.cleanup());
@@ -1000,6 +1010,171 @@ export class GameScene extends Phaser.Scene {
       );
     }
     this.updateMembershipControls();
+  }
+
+  private createMembershipIdentity(): void {
+    if (!hasActiveMembership(this.membership)) return;
+    const elite = isEliteMembership(this.membership);
+    const accent = elite ? 0xbda7ff : COLORS.yellow;
+    const icon = elite ? '◆' : '★';
+    const planLabel = elite ? 'DADDY ELITE' : 'DADDY PLUS';
+
+    const badge = this.add.container(GAME_WIDTH - 24, 92).setDepth(44).setScrollFactor(0);
+    const badgeBg = this.add
+      .rectangle(0, 0, 188, 38, elite ? 0x552aa8 : 0x805a00, 0.96)
+      .setOrigin(1, 0.5)
+      .setStrokeStyle(2, accent, 1);
+    const badgeText = this.add
+      .text(-12, 0, `${icon} ${planLabel}`, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '13px',
+        color: '#ffffff',
+        stroke: '#020718',
+        strokeThickness: 3,
+      })
+      .setOrigin(1, 0.5);
+    badge.add([badgeBg, badgeText]);
+
+    const weaponTexture: Record<PremiumWeaponId, string> = {
+      'plasma-neon': 'vip-tridente-plasma',
+      'misil-sabor': 'vip-misil-sabor',
+      'rayo-poseidon': 'vip-rayo-poseidon',
+    };
+    const outfit = OUTFITS.find((entry) => entry.id === this.membership.selectedOutfit);
+    const weapon = PREMIUM_WEAPONS[this.membership.selectedWeapon];
+    const benefitCard = this.add
+      .container(GAME_WIDTH / 2, 448)
+      .setDepth(80)
+      .setScrollFactor(0)
+      .setAlpha(0)
+      .setScale(0.88);
+    const glow = this.add
+      .rectangle(0, 0, 656, 190, accent, 0.13)
+      .setStrokeStyle(6, accent, 0.22);
+    const panel = this.add
+      .rectangle(0, 0, 638, 172, 0x06142e, 0.97)
+      .setStrokeStyle(3, accent, 1);
+    const outfitImage = this.add
+      .image(-252, 0, outfit?.textureKey ?? 'daddy-pollo')
+      .setDisplaySize(142, 142);
+    const weaponImage = this.add
+      .image(252, 1, weaponTexture[this.membership.selectedWeapon])
+      .setDisplaySize(138, 104);
+    const heading = this.add
+      .text(0, -56, `${icon} BENEFICIOS ${planLabel}`, {
+        fontFamily: 'Impact, Arial Black, sans-serif',
+        fontSize: '24px',
+        color: elite ? '#d9c9ff' : '#ffe36b',
+        stroke: '#020718',
+        strokeThickness: 5,
+      })
+      .setOrigin(0.5);
+    const loadout = this.add
+      .text(0, -15, `${outfit?.name ?? 'Daddy Clásico'}  •  ${weapon.shortName}`, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '14px',
+        color: '#ffffff',
+        align: 'center',
+      })
+      .setOrigin(0.5);
+    const benefits = this.add
+      .text(
+        0,
+        37,
+        elite
+          ? 'ARMA VIP 15s  •  AVIÓN 10s  •  PODER ELITE\n10% DESCUENTO  •  BENEFICIO MENSUAL'
+          : 'ARMA VIP 15s  •  AVIÓN 10s\nVESTUARIO EXCLUSIVO  •  10% DESCUENTO',
+        {
+          fontFamily: 'Arial Black, sans-serif',
+          fontSize: '12px',
+          color: elite ? '#8cecff' : '#fff0a6',
+          align: 'center',
+          lineSpacing: 5,
+        },
+      )
+      .setOrigin(0.5);
+    benefitCard.add([
+      glow,
+      panel,
+      outfitImage,
+      weaponImage,
+      heading,
+      loadout,
+      benefits,
+    ]);
+    this.tweens.add({
+      targets: benefitCard,
+      alpha: 1,
+      scale: 1,
+      duration: 350,
+      delay: 300,
+      ease: 'Back.out',
+      onComplete: () => {
+        this.time.delayedCall(2100, () => {
+          this.tweens.add({
+            targets: benefitCard,
+            alpha: 0,
+            y: 410,
+            duration: 300,
+            ease: 'Quad.in',
+            onComplete: () => benefitCard.destroy(true),
+          });
+        });
+      },
+    });
+  }
+
+  private showMembershipAssetToast(
+    texture: string,
+    title: string,
+    detail: string,
+    color: number,
+  ): void {
+    const toast = this.add
+      .container(GAME_WIDTH / 2, 455)
+      .setDepth(82)
+      .setScrollFactor(0)
+      .setAlpha(0)
+      .setScale(0.86);
+    const bg = this.add
+      .rectangle(0, 0, 470, 112, 0x06142e, 0.97)
+      .setStrokeStyle(3, color, 1);
+    const image = this.add.image(-172, 0, texture).setDisplaySize(112, 86);
+    const heading = this.add
+      .text(-92, -19, title, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '18px',
+        color: '#ffffff',
+        stroke: '#020718',
+        strokeThickness: 4,
+      })
+      .setOrigin(0, 0.5);
+    const copy = this.add
+      .text(-92, 22, detail, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '13px',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+      })
+      .setOrigin(0, 0.5);
+    toast.add([bg, image, heading, copy]);
+    this.tweens.add({
+      targets: toast,
+      alpha: 1,
+      scale: 1,
+      duration: 250,
+      ease: 'Back.out',
+      onComplete: () => {
+        this.time.delayedCall(1500, () => {
+          this.tweens.add({
+            targets: toast,
+            alpha: 0,
+            y: 420,
+            duration: 280,
+            onComplete: () => toast.destroy(true),
+          });
+        });
+      },
+    });
   }
 
   private makeVipAbilityButton(
@@ -3906,6 +4081,17 @@ export class GameScene extends Phaser.Scene {
     this.premiumWeaponActiveUntil = this.time.now + 15_000;
     this.nextShotAt = 0;
     const weapon = PREMIUM_WEAPONS[this.membership.selectedWeapon];
+    const weaponTexture: Record<PremiumWeaponId, string> = {
+      'plasma-neon': 'vip-tridente-plasma',
+      'misil-sabor': 'vip-misil-sabor',
+      'rayo-poseidon': 'vip-rayo-poseidon',
+    };
+    this.showMembershipAssetToast(
+      weaponTexture[this.membership.selectedWeapon],
+      weapon.name,
+      'BENEFICIO VIP ACTIVADO • 15 SEGUNDOS',
+      weapon.color,
+    );
     this.showFloatingText(
       this.player.x,
       this.player.y - 165,
@@ -3960,16 +4146,7 @@ export class GameScene extends Phaser.Scene {
     const halo = this.add
       .ellipse(0, 18, 190, 76, 0x43d9ff, 0.18)
       .setBlendMode(Phaser.BlendModes.ADD);
-    const gfx = this.add.graphics();
-    gfx.fillStyle(0x123f74, 1);
-    gfx.fillTriangle(0, -70, -92, 50, 92, 50);
-    gfx.fillStyle(0x43d9ff, 1);
-    gfx.fillTriangle(0, -48, -38, 38, 38, 38);
-    gfx.fillStyle(0xffd21e, 1);
-    gfx.fillTriangle(-92, 50, -46, 28, -30, 53);
-    gfx.fillTriangle(92, 50, 46, 28, 30, 53);
-    gfx.fillStyle(0xffffff, 0.95);
-    gfx.fillCircle(0, -10, 12);
+    const aircraft = this.add.image(0, -16, 'avion-daddy').setDisplaySize(205, 124);
     const label = this.add
       .text(0, 20, 'DADDY AIR', {
         fontFamily: 'Arial Black, sans-serif',
@@ -3979,9 +4156,15 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 4,
       })
       .setOrigin(0.5);
-    plane.add([halo, gfx, label]);
+    plane.add([halo, aircraft, label]);
     plane.setScale(0.72);
     this.premiumPlane = plane;
+    this.showMembershipAssetToast(
+      'avion-daddy',
+      'AVIÓN DADDY',
+      'ATAQUE AÉREO ACTIVADO • 10 SEGUNDOS',
+      0x43d9ff,
+    );
     this.showFloatingText(this.player.x, this.player.y - 225, 'AVION • 10 SEGUNDOS', '#43d9ff');
     this.cameras.main.shake(160, 0.008);
     audioManager.play('power');
@@ -4106,6 +4289,16 @@ export class GameScene extends Phaser.Scene {
   }
 
   private showElitePowerEffect(name: string, color: number, cycle: number): void {
+    const powerTexture = [
+      'poder-rayos-cielo',
+      'poder-fuego-arrasador',
+      'poder-terremoto-daddy',
+    ][cycle];
+    const powerImage = this.add
+      .image(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 145, powerTexture)
+      .setDisplaySize(270, 190)
+      .setDepth(69)
+      .setAlpha(0.82);
     const title = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT / 2, name, {
         fontFamily: 'Impact, Arial Black, sans-serif',
@@ -4142,7 +4335,7 @@ export class GameScene extends Phaser.Scene {
       this.time.delayedCall(950, () => fire.destroy());
     }
     this.tweens.add({
-      targets: [title, flash],
+      targets: [title, flash, powerImage],
       alpha: 0,
       scale: 1.18,
       duration: 900,
@@ -4150,6 +4343,7 @@ export class GameScene extends Phaser.Scene {
       onComplete: () => {
         title.destroy();
         flash.destroy();
+        powerImage.destroy();
       },
     });
     audioManager.play('blast');
@@ -4246,7 +4440,11 @@ export class GameScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
 
   private updateHud(): void {
-    this.scoreText.setText(`Puntos: ${this.score}`);
+    const elite = isEliteMembership(this.membership);
+    const plus = hasActiveMembership(this.membership) && !elite;
+    this.scoreText
+      .setText(`${elite ? '◆ ' : plus ? '★ ' : ''}Puntos: ${this.score}`)
+      .setColor(elite ? '#8cecff' : plus ? '#ffe36b' : COLORS_HEX.white);
     this.livesText.setText('❤️'.repeat(Math.max(0, this.lives)) || '💀');
     this.comboText.setText(this.comboCount >= 2 ? `Combo: ${this.comboCount}` : '');
     this.worldText
