@@ -18,6 +18,10 @@ import {
   getAdminMembershipReportHandler,
   getAdminPlayerReportHandler,
 } from '../controllers/adminReport.controller.js';
+import {
+  getNotificationSummaryHandler,
+  sendNotificationCampaignHandler,
+} from '../controllers/notification.controller.js';
 
 const router = Router();
 
@@ -27,6 +31,16 @@ router.get('/session', asyncHandler(getAdminSession));
 router.get('/configuration', requireAdmin, asyncHandler(getAdminConfiguration));
 router.put('/configuration', requireAdmin, asyncHandler(updateAdminConfiguration));
 router.get('/reports/players', requireAdmin, asyncHandler(getAdminPlayerReportHandler));
+router.get(
+  '/notifications',
+  requireAdmin,
+  asyncHandler(getNotificationSummaryHandler),
+);
+router.post(
+  '/notifications',
+  requireAdmin,
+  asyncHandler(sendNotificationCampaignHandler),
+);
 router.get(
   '/reports/memberships',
   requireAdmin,

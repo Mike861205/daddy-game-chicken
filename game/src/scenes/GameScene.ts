@@ -30,7 +30,9 @@ import {
   OUTFITS,
   PREMIUM_WEAPONS,
   hasActiveMembership,
+  isOutfitAvailable,
   isEliteMembership,
+  withLocalDevelopmentAccess,
   type MembershipEntitlement,
   type PremiumWeaponId,
 } from '../config/memberships.js';
@@ -174,6 +176,9 @@ export class GameScene extends Phaser.Scene {
   private keyF?: Phaser.Input.Keyboard.Key;
   private keyS?: Phaser.Input.Keyboard.Key;
   private keyShift?: Phaser.Input.Keyboard.Key;
+  private keyOne?: Phaser.Input.Keyboard.Key;
+  private keyTwo?: Phaser.Input.Keyboard.Key;
+  private keyThree?: Phaser.Input.Keyboard.Key;
 
   private leftPressed = false;
   private rightPressed = false;
@@ -204,10 +209,11 @@ export class GameScene extends Phaser.Scene {
     this.resetState();
     this.config =
       (this.registry.get(REGISTRY.publicConfig) as PublicConfig | undefined) ?? DEFAULT_CONFIG;
-    this.membership =
+    this.membership = withLocalDevelopmentAccess(
       (this.registry.get(REGISTRY.membership) as MembershipEntitlement | undefined)
       ?? storage.getMembership()
-      ?? { ...EMPTY_MEMBERSHIP };
+      ?? { ...EMPTY_MEMBERSHIP },
+    );
     this.applyDifficultySettings(this.config.difficultyLevel);
     this.refreshWorldPace();
     this.timeLeft = this.getBossArrivalSeconds();
@@ -281,7 +287,7 @@ export class GameScene extends Phaser.Scene {
     this.premiumWeaponUsedWorlds.clear();
     this.premiumPlaneUsedWorlds.clear();
     this.elitePowerUsedWorlds.clear();
-    this.elitePowerCharge = 25;
+    this.elitePowerCharge = import.meta.env.DEV ? 100 : 25;
     this.premiumPlaneExpiresAt = 0;
     this.nextPremiumPlaneShotAt = 0;
     this.leftPressed = false;
@@ -431,7 +437,7 @@ export class GameScene extends Phaser.Scene {
       : undefined;
     const outfitUnlocked =
       selectedOutfit
-      && storage.getMaxWorldUnlocked() >= selectedOutfit.unlockWorld;
+      && isOutfitAvailable(selectedOutfit.unlockWorld, storage.getMaxWorldUnlocked());
     this.player = new Player(
       this,
       GAME_WIDTH / 2,
@@ -914,6 +920,9 @@ export class GameScene extends Phaser.Scene {
     this.keyF = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F, false);
     this.keyS = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S, false);
     this.keyShift = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT, false);
+    this.keyOne = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ONE, false);
+    this.keyTwo = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TWO, false);
+    this.keyThree = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.THREE, false);
     this.input.keyboard.on('keydown-P', () => this.togglePause());
   }
 
@@ -975,21 +984,21 @@ export class GameScene extends Phaser.Scene {
       this.premiumWeaponControl = this.makeVipAbilityButton(
         105,
         y,
-        '⚔ ARMA VIP',
+        '1 • ARMA VIP',
         0x8c35d8,
         () => this.activatePremiumWeapon(),
       );
       this.elitePowerControl = this.makeVipAbilityButton(
         360,
         y,
-        '⚡ PODER 25%',
+        '2 • PODER 25%',
         0xe6262b,
         () => this.activateElitePower(),
       );
       this.premiumPlaneControl = this.makeVipAbilityButton(
         615,
         y,
-        '✈ AVION',
+        '3 • AVION',
         0x1450c8,
         () => this.activatePremiumPlane(),
       );
@@ -997,14 +1006,14 @@ export class GameScene extends Phaser.Scene {
       this.premiumWeaponControl = this.makeVipAbilityButton(
         205,
         y,
-        '⚔ ARMA VIP',
+        '1 • ARMA VIP',
         0x8c35d8,
         () => this.activatePremiumWeapon(),
       );
       this.premiumPlaneControl = this.makeVipAbilityButton(
         515,
         y,
-        '✈ AVION',
+        '3 • AVION',
         0x1450c8,
         () => this.activatePremiumPlane(),
       );
@@ -1231,7 +1240,7 @@ export class GameScene extends Phaser.Scene {
     if (this.premiumWeaponControl) {
       const seconds = Math.max(0, Math.ceil((this.premiumWeaponActiveUntil - this.time.now) / 1000));
       this.premiumWeaponControl.label.setText(
-        weaponActive ? `⚔ VIP ${seconds}s` : weaponUsed ? '⚔ USADA' : '⚔ ARMA VIP',
+        weaponActive ? `1 • VIP ${seconds}s` : weaponUsed ? '1 • USADA' : '1 • ARMA VIP',
       );
       this.premiumWeaponControl.button.setAlpha(weaponUsed && !weaponActive ? 0.42 : 0.96);
     }
@@ -1240,14 +1249,14 @@ export class GameScene extends Phaser.Scene {
     if (this.premiumPlaneControl) {
       const seconds = Math.max(0, Math.ceil((this.premiumPlaneExpiresAt - this.time.now) / 1000));
       this.premiumPlaneControl.label.setText(
-        planeActive ? `✈ AVION ${seconds}s` : planeUsed ? '✈ USADO' : '✈ AVION',
+        planeActive ? `3 • AVION ${seconds}s` : planeUsed ? '3 • USADO' : '3 • AVION',
       );
       this.premiumPlaneControl.button.setAlpha(planeUsed && !planeActive ? 0.42 : 0.96);
     }
     if (this.elitePowerControl) {
       const used = this.elitePowerUsedWorlds.has(world);
       this.elitePowerControl.label.setText(
-        used ? '⚡ USADO' : `⚡ PODER ${Math.round(this.elitePowerCharge)}%`,
+        used ? '2 • USADO' : `2 • PODER ${Math.round(this.elitePowerCharge)}%`,
       );
       this.elitePowerControl.button.setAlpha(used ? 0.42 : 0.96);
     }
@@ -1603,6 +1612,15 @@ export class GameScene extends Phaser.Scene {
         (this.keyW ? Phaser.Input.Keyboard.JustDown(this.keyW) : false);
       if (keyboardJump) {
         this.tryJump();
+      }
+      if (this.keyOne && Phaser.Input.Keyboard.JustDown(this.keyOne)) {
+        this.activatePremiumWeapon();
+      }
+      if (this.keyTwo && Phaser.Input.Keyboard.JustDown(this.keyTwo)) {
+        this.activateElitePower();
+      }
+      if (this.keyThree && Phaser.Input.Keyboard.JustDown(this.keyThree)) {
+        this.activatePremiumPlane();
       }
 
     if (this.player.isCovering()) {
@@ -2808,7 +2826,7 @@ export class GameScene extends Phaser.Scene {
     this.premiumPlaneExpiresAt = 0;
     this.premiumPlane?.destroy(true);
     this.premiumPlane = undefined;
-    this.elitePowerCharge = 25;
+    this.elitePowerCharge = import.meta.env.DEV ? 100 : 25;
     this.worldPaceStage = 0;
     this.nextEnemyIndex = 0;
     this.timeLeft = this.getBossArrivalSeconds();

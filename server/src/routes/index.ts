@@ -15,6 +15,10 @@ import {
   confirmMembershipCheckoutHandler,
   getMembershipStatusHandler,
 } from '../controllers/membership.controller.js';
+import {
+  getPushPublicKeyHandler,
+  savePushSubscriptionHandler,
+} from '../controllers/notification.controller.js';
 
 const router = Router();
 
@@ -26,6 +30,14 @@ router.get('/config/public', asyncHandler(getPublicConfiguration));
 
 // Players
 router.get('/players/lookup', asyncHandler(lookupPlayer));
+
+// Browser and installed-app push notifications
+router.get('/push/public-key', asyncHandler(getPushPublicKeyHandler));
+router.post(
+  '/push/subscriptions',
+  writeRateLimiter,
+  asyncHandler(savePushSubscriptionHandler),
+);
 
 // Memberships
 router.get('/memberships/status', asyncHandler(getMembershipStatusHandler));

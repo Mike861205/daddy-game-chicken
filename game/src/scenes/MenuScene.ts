@@ -16,6 +16,7 @@ import { pwaManager } from '../services/pwa.js';
 import {
   MEMBERSHIP_PLANS,
   hasActiveMembership,
+  withLocalDevelopmentAccess,
   type MembershipEntitlement,
 } from '../config/memberships.js';
 
@@ -196,10 +197,13 @@ export class MenuScene extends Phaser.Scene {
   private async restoreMemberSession(): Promise<void> {
     const phone = storage.getPlayerPhone();
     if (!phone) return;
-    const [player, membership] = await Promise.all([
+    const [player, serverMembership] = await Promise.all([
       api.lookupPlayer(phone),
       api.getMembershipStatus(phone),
     ]);
+    const membership = import.meta.env.DEV
+      ? withLocalDevelopmentAccess(storage.getMembership() ?? serverMembership)
+      : serverMembership;
     if (!this.scene.isActive() || !player || !hasActiveMembership(membership)) return;
 
     membership.selectedOutfit = storage.getSelectedOutfit();
@@ -727,6 +731,7 @@ export class MenuScene extends Phaser.Scene {
     storage.setNickname(data.avatar);
     storage.setBranch(data.branch);
     storage.setPlayerPhone(data.phone);
+    void pwaManager.syncPushSubscription();
 
     audioManager.play('click');
     removeRegistrationOverlays();
@@ -736,17 +741,14 @@ export class MenuScene extends Phaser.Scene {
     if (cachedMembership) {
       this.registry.set(REGISTRY.membership, cachedMembership);
     }
-    const membership = await api.getMembershipStatus(data.phone);
-    if (
-      membership.status !== 'none' ||
-      !import.meta.env.DEV ||
-      cachedMembership?.status !== 'active'
-    ) {
-      membership.selectedOutfit = storage.getSelectedOutfit();
-      membership.selectedWeapon = storage.getSelectedWeapon();
-      storage.setMembership(membership);
-      this.registry.set(REGISTRY.membership, membership);
-    }
+    const serverMembership = await api.getMembershipStatus(data.phone);
+    const membership = import.meta.env.DEV
+      ? withLocalDevelopmentAccess(cachedMembership ?? serverMembership)
+      : serverMembership;
+    membership.selectedOutfit = storage.getSelectedOutfit();
+    membership.selectedWeapon = storage.getSelectedWeapon();
+    storage.setMembership(membership);
+    this.registry.set(REGISTRY.membership, membership);
     this.scene.start(SCENES.Game);
   }
 

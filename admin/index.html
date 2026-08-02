@@ -65,6 +65,10 @@
               <span class="sidebar-item__icon">◆</span>
               <span><b>Membresías</b><small>Plus, Elite y actividad</small></span>
             </button>
+            <button class="sidebar-item" type="button" data-module="notifications">
+              <span class="sidebar-item__icon">●</span>
+              <span><b>Notificaciones</b><small>Recordatorios y promociones</small></span>
+            </button>
             <button class="sidebar-item" type="button" data-module="game">
               <span class="sidebar-item__icon">⚙</span>
               <span><b>Configuración</b><small>Juego y campaña</small></span>
@@ -99,6 +103,7 @@
             <section class="module-shortcuts" aria-label="Accesos rápidos">
               <button type="button" data-open-module="reports"><span>◎</span><b>Ver informes</b><small>Jugadores, horas y premios</small></button>
               <button type="button" data-open-module="memberships"><span>◆</span><b>Ver membresías</b><small>Inscritos Plus, Elite y rendimiento</small></button>
+              <button type="button" data-open-module="notifications"><span>●</span><b>Enviar notificación</b><small>Recordatorios y promociones push</small></button>
               <button type="button" data-open-module="game"><span>⚙</span><b>Configurar juego</b><small>Dificultad, contacto y campaña</small></button>
               <button type="button" data-open-module="rewards"><span>★</span><b>Administrar premios</b><small>Niveles, puntos y descuentos</small></button>
               <button type="button" data-open-module="deployment"><span>⇧</span><b>Publicar cambios</b><small>Push y despliegue seguro</small></button>
@@ -301,6 +306,98 @@
                 <button id="membership-previous" class="button button--ghost" type="button">← Anterior</button>
                 <strong id="membership-page">Página 1 de 1</strong>
                 <button id="membership-next" class="button button--ghost" type="button">Siguiente →</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="module-panel" data-module-panel="notifications" hidden>
+            <header class="module-header">
+              <p class="eyebrow">COMUNICACIÓN CON JUGADORES</p>
+              <h2>Notificaciones push del negocio</h2>
+              <p>Envía recordatorios y promociones manuales a los dispositivos que aceptaron recibir avisos.</p>
+            </header>
+
+            <section class="notification-metrics" aria-live="polite">
+              <article><span>Registrados</span><strong id="notification-registered">—</strong><small>con teléfono</small></article>
+              <article><span>Push activos</span><strong id="notification-active">—</strong><small>dispositivos disponibles</small></article>
+              <article><span>App instalada</span><strong id="notification-installed">—</strong><small>PWA en inicio</small></article>
+              <article><span>Sin instalar</span><strong id="notification-browser">—</strong><small>navegador autorizado</small></article>
+              <article><span>Sin permiso push</span><strong id="notification-unreachable">—</strong><small>requieren aceptar avisos</small></article>
+            </section>
+
+            <div class="notification-layout">
+              <form id="notification-form" class="panel notification-composer">
+                <div class="panel__heading">
+                  <div class="panel__icon panel__icon--notification">●</div>
+                  <div>
+                    <p class="eyebrow">MENSAJE MANUAL</p>
+                    <h2>Nueva notificación</h2>
+                  </div>
+                </div>
+
+                <div class="notification-form-grid">
+                  <label class="field">
+                    <span>Tipo de mensaje</span>
+                    <select id="notification-kind">
+                      <option value="REMINDER">Recordatorio</option>
+                      <option value="PROMOTION">Promoción</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Destinatarios</span>
+                    <select id="notification-audience">
+                      <option value="ALL">Todos con push activo</option>
+                      <option value="INSTALLED">Sólo app instalada</option>
+                      <option value="BROWSER">Sin instalar la app</option>
+                    </select>
+                  </label>
+                  <label class="field notification-field--wide">
+                    <span>Título</span>
+                    <input id="notification-title" maxlength="60" value="Daddy Pollo tiene algo para ti" required />
+                    <small><b id="notification-title-count">32</b>/60 caracteres</small>
+                  </label>
+                  <label class="field notification-field--wide">
+                    <span>Mensaje</span>
+                    <textarea id="notification-message" maxlength="180" rows="5" placeholder="Escribe el recordatorio o la promoción…" required></textarea>
+                    <small><b id="notification-message-count">0</b>/180 caracteres</small>
+                  </label>
+                  <label class="field notification-field--wide">
+                    <span>Destino al tocar el aviso</span>
+                    <select id="notification-target">
+                      <option value="/">Abrir el juego</option>
+                      <option value="/#memberships">Abrir membresías</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div class="notification-send-row">
+                  <p id="notification-status" class="form-message" role="status"></p>
+                  <button id="notification-send" class="button button--primary" type="submit">Revisar y enviar</button>
+                </div>
+              </form>
+
+              <aside class="panel notification-reach">
+                <p class="eyebrow">ALCANCE REAL</p>
+                <h2>Cómo reciben el mensaje</h2>
+                <ul>
+                  <li><i></i><span><b>App instalada</b>Android, escritorio e iPhone con la PWA instalada y permiso aceptado.</span></li>
+                  <li><i></i><span><b>Sin instalar</b>Android y computadoras pueden recibir push desde el navegador si aceptaron el permiso.</span></li>
+                  <li class="is-warning"><i></i><span><b>iPhone sin instalar</b>Apple exige añadir la PWA a Inicio; no puede recibir Web Push sólo desde una pestaña.</span></li>
+                </ul>
+                <p>Los teléfonos sin permiso no se pueden contactar por push. Para ellos se requiere integrar SMS o WhatsApp Business con consentimiento.</p>
+              </aside>
+            </div>
+
+            <section class="panel notification-history-panel">
+              <div class="panel__heading panel__heading--split">
+                <div>
+                  <p class="eyebrow">HISTORIAL</p>
+                  <h2>Últimos mensajes enviados</h2>
+                </div>
+                <button id="notification-refresh" class="button button--secondary" type="button">↻ Actualizar</button>
+              </div>
+              <div id="notification-history" class="notification-history">
+                <p class="report-status">Cargando campañas…</p>
               </div>
             </section>
           </div>

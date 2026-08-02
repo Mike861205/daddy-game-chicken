@@ -5,7 +5,9 @@ import {
   OUTFITS,
   PREMIUM_WEAPONS,
   hasActiveMembership,
+  isOutfitAvailable,
   isEliteMembership,
+  withLocalDevelopmentAccess,
   type MembershipEntitlement,
   type MembershipPlanId,
   type OutfitId,
@@ -30,6 +32,14 @@ import type { PublicConfig } from '../types.js';
 
 type MembershipTab = 'plans' | 'wardrobe' | 'arsenal';
 
+interface AnimatedCharacterRig {
+  root: Phaser.GameObjects.Container;
+  head: Phaser.GameObjects.Container;
+  hands: Phaser.GameObjects.Container;
+  leftFoot: Phaser.GameObjects.Container;
+  rightFoot: Phaser.GameObjects.Container;
+}
+
 /**
  * Branded membership hub. Stripe Checkout is server-created; this scene never
  * receives card data or secret keys.
@@ -49,7 +59,9 @@ export class MembershipScene extends Phaser.Scene {
   create(): void {
     removeRegistrationOverlays();
     this.input.enabled = true;
-    this.membership = storage.getMembership() ?? { ...EMPTY_MEMBERSHIP };
+    this.membership = withLocalDevelopmentAccess(
+      storage.getMembership() ?? { ...EMPTY_MEMBERSHIP },
+    );
     this.membership.selectedOutfit = storage.getSelectedOutfit();
     this.membership.selectedWeapon = storage.getSelectedWeapon();
     this.registry.set(REGISTRY.membership, this.membership);
@@ -236,13 +248,14 @@ export class MembershipScene extends Phaser.Scene {
     const portraitHalo = this.add
       .circle(-86, -height / 2 + 180, 59, plan.accent, 0.14)
       .setStrokeStyle(2, plan.accent, 0.54);
-    const portrait = this.add
-      .image(
-        -86,
-        -height / 2 + 177,
-        plan.id === 'daddy-plus' ? 'skin-comandante-neon' : 'skin-rey-sabor',
-      )
-      .setDisplaySize(128, 128);
+    const portrait = this.createAnimatedCharacterRig(
+      -86,
+      -height / 2 + 177,
+      plan.id === 'daddy-plus' ? 'skin-comandante-neon' : 'skin-rey-sabor',
+      128,
+      1,
+      plan.id === 'daddy-plus' ? 0 : 420,
+    );
     const price = this.add
       .text(61, -height / 2 + 165, `$${plan.price}`, {
         fontFamily: 'Impact, Arial Black, sans-serif',
@@ -274,15 +287,26 @@ export class MembershipScene extends Phaser.Scene {
         .setOrigin(0, 0),
     );
     const active = hasActiveMembership(this.membership) && this.membership.planId === plan.id;
+    const actionLabel = active
+      ? '✓ PLAN ACTIVO'
+      : import.meta.env.DEV
+        ? `ACTIVAR ${plan.name.replace('DADDY ', '')} DEMO`
+        : `ELEGIR ${plan.name.replace('DADDY ', '')}`;
     const button = this.makeAction(
       0,
       height / 2 - 73,
       270,
       62,
-      active ? '✓ PLAN ACTIVO' : `ELEGIR ${plan.name.replace('DADDY ', '')}`,
+      actionLabel,
       active ? 0x27c93f : plan.color,
       () => {
-        if (!active) void this.startCheckout(plan.id);
+        if (!active) {
+          if (import.meta.env.DEV) {
+            this.activateDemo(plan.id);
+          } else {
+            void this.startCheckout(plan.id);
+          }
+        }
       },
       18,
     );
@@ -301,7 +325,7 @@ export class MembershipScene extends Phaser.Scene {
       badge,
       name,
       portraitHalo,
-      portrait,
+      portrait.root,
       price,
       period,
       separator,
@@ -392,7 +416,10 @@ export class MembershipScene extends Phaser.Scene {
 
   private addOutfitCard(x: number, y: number, outfit: (typeof OUTFITS)[number]): void {
     const activeMember = hasActiveMembership(this.membership);
-    const worldUnlocked = storage.getMaxWorldUnlocked() >= outfit.unlockWorld;
+    const worldUnlocked = isOutfitAvailable(
+      outfit.unlockWorld,
+      storage.getMaxWorldUnlocked(),
+    );
     const unlocked = activeMember && worldUnlocked;
     const selected = storage.getSelectedOutfit() === outfit.id;
     const card = this.add.container(x, y);
@@ -400,10 +427,14 @@ export class MembershipScene extends Phaser.Scene {
       .rectangle(0, 0, 300, 390, selected ? 0x123f74 : 0x07152e, 0.98)
       .setStrokeStyle(4, selected ? COLORS.yellow : unlocked ? COLORS.neon : 0x52617c, 1)
       .setInteractive({ useHandCursor: unlocked });
-    const portrait = this.add
-      .image(0, -48, outfit.textureKey)
-      .setDisplaySize(230, 230)
-      .setAlpha(unlocked ? 1 : 0.34);
+    const portrait = this.createAnimatedCharacterRig(
+      0,
+      -48,
+      outfit.textureKey,
+      230,
+      unlocked ? 1 : 0.34,
+      OUTFITS.indexOf(outfit) * 190,
+    );
     const name = this.add
       .text(0, 105, outfit.name.toUpperCase(), {
         fontFamily: 'Arial Black, sans-serif',
@@ -433,7 +464,7 @@ export class MembershipScene extends Phaser.Scene {
         fontSize: '54px',
       })
       .setOrigin(0.5);
-    card.add([bg, portrait, name, state, lock]);
+    card.add([bg, portrait.root, name, state, lock]);
     bg.on('pointerup', () => {
       if (!unlocked) {
         this.showToast(
@@ -490,6 +521,9 @@ export class MembershipScene extends Phaser.Scene {
       const imageFrame = this.add
         .rectangle(0, -44, 184, 142, 0x020817, 0.72)
         .setStrokeStyle(2, weapon.color, 0.52);
+      const weaponGlow = this.add
+        .ellipse(0, -42, 150, 72, weapon.color, membershipUnlocked ? 0.18 : 0.08)
+        .setBlendMode(Phaser.BlendModes.ADD);
       const image = this.add
         .image(0, -44, weaponImages[weapon.id])
         .setDisplaySize(174, 132)
@@ -526,7 +560,8 @@ export class MembershipScene extends Phaser.Scene {
           },
         )
         .setOrigin(0.5);
-      card.add([bg, imageFrame, image, name, duration, state]);
+      card.add([bg, imageFrame, weaponGlow, image, name, duration, state]);
+      this.animateWeaponPreview(image, weaponGlow, weapon.id, index);
       this.addRewardLock(card, !membershipUnlocked, 0, -44, 184, 142);
       bg.on('pointerup', () => {
         if (!membershipUnlocked) {
@@ -606,6 +641,9 @@ export class MembershipScene extends Phaser.Scene {
     const imageFrame = this.add
       .rectangle(-194, 0, 244, 148, 0x020817, 0.7)
       .setStrokeStyle(2, 0x43d9ff, 0.6);
+    const engineGlow = this.add
+      .ellipse(-204, 18, 178, 62, 0x43d9ff, unlocked ? 0.2 : 0.08)
+      .setBlendMode(Phaser.BlendModes.ADD);
     const image = this.add
       .image(-194, 0, 'avion-daddy')
       .setDisplaySize(232, 140)
@@ -643,7 +681,8 @@ export class MembershipScene extends Phaser.Scene {
         color: unlocked ? COLORS_HEX.neon : '#9aa8c0',
       })
       .setOrigin(0.5);
-    card.add([bg, imageFrame, image, heading, duration, description, state]);
+    card.add([bg, imageFrame, engineGlow, image, heading, duration, description, state]);
+    this.animatePlanePreview(image, engineGlow);
     this.addRewardLock(card, !unlocked, -194, 0, 244, 148);
     bg.setInteractive({ useHandCursor: !unlocked });
     bg.on('pointerup', () => {
@@ -663,6 +702,9 @@ export class MembershipScene extends Phaser.Scene {
       .rectangle(0, 0, 210, 250, 0x07152e, 0.98)
       .setStrokeStyle(4, power.color, 1)
       .setInteractive({ useHandCursor: !unlocked });
+    const aura = this.add
+      .circle(0, -45, 70, power.color, unlocked ? 0.18 : 0.07)
+      .setBlendMode(Phaser.BlendModes.ADD);
     const image = this.add
       .image(0, -45, power.texture)
       .setDisplaySize(188, 142)
@@ -684,12 +726,254 @@ export class MembershipScene extends Phaser.Scene {
         color: unlocked ? COLORS_HEX.neon : '#9aa8c0',
       })
       .setOrigin(0.5);
-    card.add([bg, image, shade, name, state]);
+    card.add([bg, aura, image, shade, name, state]);
+    this.animatePowerPreview(image, aura, power.texture);
     this.addRewardLock(card, !unlocked, 0, -45, 188, 142);
     bg.on('pointerup', () => {
       if (!unlocked) this.showToast('Este poder se desbloquea con Daddy Elite de $149.', false);
     });
     this.content?.add(card);
+  }
+
+  /**
+   * Builds a lightweight four-part rig from the existing transparent outfit.
+   * The overlapping crops keep the original artwork intact while letting the
+   * head, crossed hands and each foot move independently.
+   */
+  private createAnimatedCharacterRig(
+    x: number,
+    y: number,
+    textureKey: string,
+    displaySize: number,
+    alpha: number,
+    phase: number,
+  ): AnimatedCharacterRig {
+    const frame = this.textures.getFrame(textureKey);
+    const sourceWidth = frame?.realWidth ?? 1;
+    const sourceHeight = frame?.realHeight ?? 1;
+    const root = this.add.container(x, y);
+
+    const makeLayer = (
+      cropX: number,
+      cropY: number,
+      cropWidth: number,
+      cropHeight: number,
+      pivotX: number,
+      pivotY: number,
+    ): Phaser.GameObjects.Container => {
+      const pivot = this.add.container(pivotX, pivotY);
+      const image = this.add
+        .image(-pivotX, -pivotY, textureKey)
+        .setDisplaySize(displaySize, displaySize)
+        .setAlpha(alpha)
+        .setCrop(cropX, cropY, cropWidth, cropHeight);
+      pivot.add(image);
+      return pivot;
+    };
+
+    const headCut = Math.round(sourceHeight * 0.46);
+    const handsTop = Math.round(sourceHeight * 0.38);
+    const handsBottom = Math.round(sourceHeight * 0.76);
+    const feetTop = Math.round(sourceHeight * 0.7);
+    const halfWidth = Math.ceil(sourceWidth / 2);
+    const headPivotY = -displaySize * 0.095;
+    const handsPivotY = displaySize * 0.075;
+    const feetPivotY = displaySize * 0.31;
+
+    const head = makeLayer(0, 0, sourceWidth, headCut, 0, headPivotY);
+    const hands = makeLayer(
+      0,
+      handsTop,
+      sourceWidth,
+      handsBottom - handsTop,
+      0,
+      handsPivotY,
+    );
+    const leftFoot = makeLayer(
+      0,
+      feetTop,
+      halfWidth,
+      sourceHeight - feetTop,
+      -displaySize * 0.13,
+      feetPivotY,
+    );
+    const rightFoot = makeLayer(
+      halfWidth,
+      feetTop,
+      sourceWidth - halfWidth,
+      sourceHeight - feetTop,
+      displaySize * 0.13,
+      feetPivotY,
+    );
+    root.add([leftFoot, rightFoot, hands, head]);
+
+    const motionScale = displaySize / 230;
+    this.tweens.add({
+      targets: root,
+      y: { from: y + 1.5 * motionScale, to: y - 2.5 * motionScale },
+      scaleY: { from: 0.994, to: 1.008 },
+      duration: 1550,
+      delay: phase,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: head,
+      angle: { from: -1.8, to: 2.1 },
+      x: { from: -0.8 * motionScale, to: 0.8 * motionScale },
+      y: {
+        from: headPivotY + 0.8 * motionScale,
+        to: headPivotY - 1.2 * motionScale,
+      },
+      duration: 1950,
+      delay: phase + 90,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: hands,
+      angle: { from: -0.7, to: 0.8 },
+      y: {
+        from: handsPivotY + 1.4 * motionScale,
+        to: handsPivotY - 1.2 * motionScale,
+      },
+      scaleY: { from: 0.99, to: 1.012 },
+      duration: 1280,
+      delay: phase + 180,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: leftFoot,
+      angle: { from: -1.2, to: 1.5 },
+      y: {
+        from: feetPivotY + 0.8 * motionScale,
+        to: feetPivotY - 1.1 * motionScale,
+      },
+      duration: 1120,
+      delay: phase + 260,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: rightFoot,
+      angle: { from: 1.4, to: -1.1 },
+      y: {
+        from: feetPivotY - 0.8 * motionScale,
+        to: feetPivotY + 1.1 * motionScale,
+      },
+      duration: 1120,
+      delay: phase + 260,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+
+    return { root, head, hands, leftFoot, rightFoot };
+  }
+
+  private animateWeaponPreview(
+    image: Phaser.GameObjects.Image,
+    glow: Phaser.GameObjects.Ellipse,
+    weaponId: PremiumWeaponId,
+    index: number,
+  ): void {
+    const baseScaleX = image.scaleX;
+    const baseScaleY = image.scaleY;
+    const isMissile = weaponId === 'misil-sabor';
+    const isRay = weaponId === 'rayo-poseidon';
+    this.tweens.add({
+      targets: image,
+      x: { from: isMissile ? -3 : -1, to: isMissile ? 3 : 1 },
+      y: { from: -47, to: -41 },
+      angle: { from: isRay ? -2.2 : -1.2, to: isRay ? 2.2 : 1.2 },
+      scaleX: { from: baseScaleX * 0.985, to: baseScaleX * 1.025 },
+      scaleY: { from: baseScaleY * 0.985, to: baseScaleY * 1.025 },
+      duration: isMissile ? 1180 : isRay ? 760 : 980,
+      delay: index * 170,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: glow,
+      alpha: { from: 0.12, to: 0.34 },
+      scaleX: { from: 0.86, to: 1.08 },
+      scaleY: { from: 0.82, to: 1.05 },
+      duration: 720 + index * 120,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+  }
+
+  private animatePlanePreview(
+    image: Phaser.GameObjects.Image,
+    glow: Phaser.GameObjects.Ellipse,
+  ): void {
+    const baseScaleX = image.scaleX;
+    const baseScaleY = image.scaleY;
+    this.tweens.add({
+      targets: image,
+      x: { from: -200, to: -188 },
+      y: { from: 3, to: -4 },
+      angle: { from: -1.8, to: 1.8 },
+      scaleX: { from: baseScaleX * 0.99, to: baseScaleX * 1.02 },
+      scaleY: { from: baseScaleY * 0.99, to: baseScaleY * 1.02 },
+      duration: 1650,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+    this.tweens.add({
+      targets: glow,
+      x: { from: -207, to: -197 },
+      alpha: { from: 0.11, to: 0.32 },
+      scaleX: { from: 0.78, to: 1.12 },
+      duration: 820,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
+  }
+
+  private animatePowerPreview(
+    image: Phaser.GameObjects.Image,
+    aura: Phaser.GameObjects.Arc,
+    textureKey: string,
+  ): void {
+    const baseScaleX = image.scaleX;
+    const baseScaleY = image.scaleY;
+    const isLightning = textureKey === 'poder-rayos-cielo';
+    const isFire = textureKey === 'poder-fuego-arrasador';
+    this.tweens.add({
+      targets: image,
+      x: { from: isLightning ? -2.5 : -1, to: isLightning ? 2.5 : 1 },
+      y: { from: -49, to: isFire ? -40 : -42 },
+      angle: {
+        from: isLightning ? -2.4 : -1.3,
+        to: isLightning ? 2.4 : 1.3,
+      },
+      scaleX: { from: baseScaleX * 0.97, to: baseScaleX * (isFire ? 1.07 : 1.045) },
+      scaleY: { from: baseScaleY * 0.97, to: baseScaleY * (isFire ? 1.07 : 1.045) },
+      duration: isLightning ? 430 : isFire ? 720 : 560,
+      yoyo: true,
+      repeat: -1,
+      ease: isLightning ? 'Sine.inOut' : 'Quad.inOut',
+    });
+    this.tweens.add({
+      targets: aura,
+      alpha: { from: 0.08, to: 0.34 },
+      scale: { from: 0.78, to: 1.18 },
+      duration: isLightning ? 360 : isFire ? 680 : 520,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.inOut',
+    });
   }
 
   private addRewardLock(
@@ -770,11 +1054,10 @@ export class MembershipScene extends Phaser.Scene {
       this.updateStatusLabel();
       return;
     }
-    const membership = await api.getMembershipStatus(phone);
-    // Keep local demo state while developing when the server has no Stripe data.
-    if (import.meta.env.DEV && membership.status === 'none' && hasActiveMembership(this.membership)) {
-      return;
-    }
+    const serverMembership = await api.getMembershipStatus(phone);
+    const membership = import.meta.env.DEV
+      ? withLocalDevelopmentAccess(this.membership)
+      : serverMembership;
     membership.selectedOutfit = storage.getSelectedOutfit();
     membership.selectedWeapon = storage.getSelectedWeapon();
     this.membership = membership;

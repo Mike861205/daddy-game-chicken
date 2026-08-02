@@ -27,6 +27,51 @@ model Player {
   @@map("players")
 }
 
+enum NotificationAudience {
+  ALL
+  INSTALLED
+  BROWSER
+}
+
+enum NotificationKind {
+  REMINDER
+  PROMOTION
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid()) @db.Uuid
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  phone     String?
+  installed Boolean @default(false)
+  userAgent String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([phone])
+  @@index([active])
+  @@index([installed])
+  @@map("push_subscriptions")
+}
+
+model NotificationCampaign {
+  id             String               @id @default(uuid()) @db.Uuid
+  title          String
+  message        String
+  targetUrl      String               @default("/")
+  kind           NotificationKind
+  audience       NotificationAudience
+  recipientCount Int                  @default(0)
+  deliveredCount Int                  @default(0)
+  failedCount    Int                  @default(0)
+  createdAt      DateTime             @default(now())
+
+  @@index([createdAt])
+  @@map("notification_campaigns")
+}
+
 enum MembershipPlan {
   DADDY_PLUS
   DADDY_ELITE

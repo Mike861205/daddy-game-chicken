@@ -36,6 +36,49 @@ function resolveInitialBranch(branches: Branch[], requested?: string): string {
     : branches[0]?.id ?? '';
 }
 
+function normalizePhone(value: string): string {
+  return value.replace(/\D/gu, '').slice(0, 10);
+}
+
+function isValidPhone(value: string): boolean {
+  return /^\d{10}$/u.test(value);
+}
+
+function showPhoneCorrectionModal(input: HTMLInputElement): void {
+  if (document.querySelector('.dgc-phone-correction')) return;
+
+  const modal = document.createElement('div');
+  modal.className = 'dgc-phone-correction';
+  modal.innerHTML = `
+    <section class="dgc-phone-dialog" role="alertdialog" aria-modal="true"
+      aria-labelledby="dgc-phone-dialog-title" aria-describedby="dgc-phone-dialog-copy">
+      <div class="dgc-phone-dialog__icon" aria-hidden="true">!</div>
+      <h2 id="dgc-phone-dialog-title">Registra tu número correcto</h2>
+      <p id="dgc-phone-dialog-copy">Escribe exactamente los 10 dígitos de tu teléfono, sin espacios, guiones ni lada internacional.</p>
+      <button type="button" class="dgc-btn dgc-btn--primary">CORREGIR NÚMERO</button>
+    </section>`;
+  document.body.appendChild(modal);
+
+  const closeButton = modal.querySelector('button') as HTMLButtonElement;
+  const close = () => {
+    modal.remove();
+    input.focus();
+  };
+  closeButton.addEventListener('click', close);
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) close();
+  });
+  closeButton.focus();
+}
+
+function preparePhoneInput(input: HTMLInputElement): void {
+  input.value = normalizePhone(input.value);
+  input.addEventListener('input', () => {
+    const normalized = normalizePhone(input.value);
+    if (input.value !== normalized) input.value = normalized;
+  });
+}
+
 /**
  * Show a modern HTML registration form as an overlay above the game canvas.
  * Resolves with the collected data, or null if the user cancels.
@@ -85,8 +128,8 @@ export function showRegistrationForm(
 
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-phone">Teléfono</label>
-            <input class="dgc-input" id="dgc-phone" name="phone" type="tel" maxlength="20"
-              inputmode="tel" autocomplete="off" placeholder="Ej. 6241548148" value="${escapeAttr(
+            <input class="dgc-input" id="dgc-phone" name="phone" type="tel" maxlength="10"
+              inputmode="numeric" autocomplete="tel-national" pattern="[0-9]{10}" placeholder="Ej. 6241548148" value="${escapeAttr(
                 defaults.phone ?? '',
               )}" />
           </div>
@@ -117,6 +160,7 @@ export function showRegistrationForm(
     const nameInput = overlay.querySelector('#dgc-name') as HTMLInputElement;
     const avatarInput = overlay.querySelector('#dgc-avatar') as HTMLInputElement;
     const phoneInput = overlay.querySelector('#dgc-phone') as HTMLInputElement;
+    preparePhoneInput(phoneInput);
     const errorEl = overlay.querySelector('#dgc-error') as HTMLElement;
     const cancelBtn = overlay.querySelector('#dgc-cancel') as HTMLButtonElement;
     const branchEls = Array.from(
@@ -150,7 +194,7 @@ export function showRegistrationForm(
       event.preventDefault();
       const name = nameInput.value.trim();
       const avatar = avatarInput.value.trim();
-      const phone = phoneInput.value.trim();
+      const phone = normalizePhone(phoneInput.value);
 
       if (!name) {
         showError('Escribe tu nombre.');
@@ -163,13 +207,11 @@ export function showRegistrationForm(
         return;
       }
       if (!phone) {
-        showError('Escribe tu teléfono para guardar tu progreso.');
-        phoneInput.focus();
+        showPhoneCorrectionModal(phoneInput);
         return;
       }
-      if (!/^[0-9+\-\s]{7,20}$/u.test(phone)) {
-        showError('Teléfono inválido.');
-        phoneInput.focus();
+      if (!isValidPhone(phone)) {
+        showPhoneCorrectionModal(phoneInput);
         return;
       }
       if (!selectedBranch) {
@@ -256,8 +298,8 @@ export function showReturningPlayerForm(
         <form class="dgc-card__body" novalidate autocomplete="off">
           <div class="dgc-field">
             <label class="dgc-label" for="dgc-r-phone">Teléfono registrado</label>
-            <input class="dgc-input" id="dgc-r-phone" name="phone" type="tel" maxlength="20"
-              inputmode="tel" autocomplete="off" placeholder="Ej. 6241548148" value="${escapeAttr(
+            <input class="dgc-input" id="dgc-r-phone" name="phone" type="tel" maxlength="10"
+              inputmode="numeric" autocomplete="tel-national" pattern="[0-9]{10}" placeholder="Ej. 6241548148" value="${escapeAttr(
                 defaults.phone ?? '',
               )}" />
           </div>
@@ -288,6 +330,7 @@ export function showReturningPlayerForm(
 
     const form = overlay.querySelector('form') as HTMLFormElement;
     const phoneInput = overlay.querySelector('#dgc-r-phone') as HTMLInputElement;
+    preparePhoneInput(phoneInput);
     const foundEl = overlay.querySelector('#dgc-found') as HTMLElement;
     const errorEl = overlay.querySelector('#dgc-error') as HTMLElement;
     const submitBtn = overlay.querySelector('#dgc-submit') as HTMLButtonElement;
@@ -339,11 +382,10 @@ export function showReturningPlayerForm(
 
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
-      const phone = phoneInput.value.trim();
+      const phone = normalizePhone(phoneInput.value);
 
-      if (!/^[0-9+\-\s]{7,20}$/u.test(phone)) {
-        showError('Teléfono inválido.');
-        phoneInput.focus();
+      if (!isValidPhone(phone)) {
+        showPhoneCorrectionModal(phoneInput);
         return;
       }
 

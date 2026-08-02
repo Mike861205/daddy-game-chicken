@@ -24,6 +24,7 @@ type AdminModule =
   | 'overview'
   | 'reports'
   | 'memberships'
+  | 'notifications'
   | 'game'
   | 'rewards'
   | 'deployment';
@@ -140,6 +141,31 @@ interface MembershipReport {
   };
 }
 
+type NotificationAudience = 'ALL' | 'INSTALLED' | 'BROWSER';
+type NotificationKind = 'REMINDER' | 'PROMOTION';
+
+interface NotificationCampaign {
+  id: string;
+  title: string;
+  message: string;
+  kind: NotificationKind;
+  audience: NotificationAudience;
+  recipientCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  createdAt: string;
+}
+
+interface NotificationSummary {
+  enabled: boolean;
+  registeredPlayers: number;
+  activeSubscriptions: number;
+  installedSubscriptions: number;
+  browserSubscriptions: number;
+  registeredWithoutPush: number;
+  campaigns: NotificationCampaign[];
+}
+
 const loginView = required<HTMLElement>('login-view');
 const adminView = required<HTMLElement>('admin-view');
 const loginForm = required<HTMLFormElement>('login-form');
@@ -187,6 +213,12 @@ const sidebarToggle = required<HTMLButtonElement>('sidebar-toggle');
 const sidebarBackdrop = required<HTMLButtonElement>('sidebar-backdrop');
 const currentModuleLabel = required<HTMLElement>('current-module-label');
 const saveBar = required<HTMLElement>('save-bar');
+const notificationForm = required<HTMLFormElement>('notification-form');
+const notificationTitle = required<HTMLInputElement>('notification-title');
+const notificationMessage = required<HTMLTextAreaElement>('notification-message');
+const notificationSend = required<HTMLButtonElement>('notification-send');
+const notificationStatus = required<HTMLElement>('notification-status');
+const notificationHistory = required<HTMLElement>('notification-history');
 
 let currentConfig: AdminConfig | null = null;
 let deploymentTimer: number | null = null;
@@ -206,6 +238,7 @@ const moduleLabels: Record<AdminModule, string> = {
   overview: 'Inicio',
   reports: 'Informes',
   memberships: 'Membresías',
+  notifications: 'Notificaciones',
   game: 'Configuración',
   rewards: 'Premios',
   deployment: 'Despliegue',
@@ -274,6 +307,9 @@ function activateModule(module: AdminModule, updateHash = true): void {
   }
   if (module === 'memberships' && membershipPlayersBody.children.length === 0) {
     void loadMembershipReports();
+  }
+  if (module === 'notifications' && notificationHistory.dataset.loaded !== 'true') {
+    void loadNotificationSummary();
   }
 }
 
@@ -729,6 +765,119 @@ async function loadMembershipReports(): Promise<void> {
   }
 }
 
+function notificationAudienceLabel(audience: NotificationAudience): string {
+  return {
+    ALL: 'Todos',
+    INSTALLED: 'App instalada',
+    BROWSER: 'Sin instalar',
+  }[audience];
+}
+
+function renderNotificationSummary(summary: NotificationSummary): void {
+  required<HTMLElement>('notification-registered').textContent =
+    summary.registeredPlayers.toLocaleString('es-MX');
+  required<HTMLElement>('notification-active').textContent =
+    summary.activeSubscriptions.toLocaleString('es-MX');
+  required<HTMLElement>('notification-installed').textContent =
+    summary.installedSubscriptions.toLocaleString('es-MX');
+  required<HTMLElement>('notification-browser').textContent =
+    summary.browserSubscriptions.toLocaleString('es-MX');
+  required<HTMLElement>('notification-unreachable').textContent =
+    summary.registeredWithoutPush.toLocaleString('es-MX');
+
+  notificationHistory.dataset.loaded = 'true';
+  if (summary.campaigns.length === 0) {
+    notificationHistory.innerHTML =
+      '<p class="notification-empty">Todavía no se han enviado notificaciones manuales.</p>';
+    return;
+  }
+
+  notificationHistory.innerHTML = summary.campaigns
+    .map(
+      (campaign) => `
+        <article class="notification-history-card">
+          <div class="notification-history-card__top">
+            <span class="notification-kind is-${campaign.kind.toLowerCase()}">${campaign.kind === 'PROMOTION' ? 'Promoción' : 'Recordatorio'}</span>
+            <time>${formatReportDate(campaign.createdAt)}</time>
+          </div>
+          <h3>${escapeHtml(campaign.title)}</h3>
+          <p>${escapeHtml(campaign.message)}</p>
+          <div class="notification-delivery">
+            <span>${notificationAudienceLabel(campaign.audience)}</span>
+            <b>${campaign.deliveredCount.toLocaleString('es-MX')} enviados</b>
+            <small>${campaign.recipientCount.toLocaleString('es-MX')} destinatarios · ${campaign.failedCount.toLocaleString('es-MX')} fallidos</small>
+          </div>
+        </article>`,
+    )
+    .join('');
+}
+
+async function loadNotificationSummary(): Promise<void> {
+  notificationHistory.innerHTML =
+    '<p class="report-status is-loading">Consultando suscripciones y campañas…</p>';
+  try {
+    renderNotificationSummary(await api<NotificationSummary>('/notifications'));
+  } catch (error) {
+    notificationHistory.dataset.loaded = 'false';
+    notificationHistory.innerHTML = `<p class="report-status report-status--error">${escapeHtml(
+      error instanceof Error ? error.message : 'No se pudo cargar el módulo de notificaciones.',
+    )}</p>`;
+  }
+}
+
+function updateNotificationCounters(): void {
+  required<HTMLElement>('notification-title-count').textContent =
+    String(notificationTitle.value.length);
+  required<HTMLElement>('notification-message-count').textContent =
+    String(notificationMessage.value.length);
+}
+
+async function sendManualNotification(): Promise<void> {
+  const title = notificationTitle.value.trim();
+  const message = notificationMessage.value.trim();
+  const kind = required<HTMLSelectElement>('notification-kind').value as NotificationKind;
+  const audience =
+    required<HTMLSelectElement>('notification-audience').value as NotificationAudience;
+  const targetUrl = required<HTMLSelectElement>('notification-target').value;
+
+  if (title.length < 3 || message.length < 3) {
+    notificationStatus.className = 'form-message form-message--error';
+    notificationStatus.textContent = 'Escribe un título y un mensaje completos.';
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `¿Enviar "${title}" a ${notificationAudienceLabel(audience).toLowerCase()}? Esta acción notificará inmediatamente a los dispositivos disponibles.`,
+  );
+  if (!confirmed) return;
+
+  notificationSend.disabled = true;
+  notificationStatus.className = 'form-message';
+  notificationStatus.textContent = 'Enviando notificación…';
+  try {
+    const result = await api<{
+      recipientCount: number;
+      deliveredCount: number;
+      failedCount: number;
+    }>('/notifications', {
+      method: 'POST',
+      body: JSON.stringify({ title, message, kind, audience, targetUrl }),
+    });
+    notificationStatus.className = 'form-message form-message--success';
+    notificationStatus.textContent =
+      `✓ Envío terminado: ${result.deliveredCount} de ${result.recipientCount} dispositivos.`;
+    notificationMessage.value = '';
+    updateNotificationCounters();
+    await loadNotificationSummary();
+  } catch (error) {
+    notificationStatus.className = 'form-message form-message--error';
+    notificationStatus.textContent =
+      error instanceof Error ? error.message : 'No se pudo enviar la notificación.';
+  } finally {
+    notificationSend.disabled = false;
+  }
+}
+
 function renderTiers(): void {
   if (!currentConfig) return;
   tiersList.innerHTML = '';
@@ -812,6 +961,17 @@ function removeTier(index: number): void {
   currentConfig.tiers.splice(index, 1);
   renderTiers();
 }
+
+notificationForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void sendManualNotification();
+});
+notificationTitle.addEventListener('input', updateNotificationCounters);
+notificationMessage.addEventListener('input', updateNotificationCounters);
+required<HTMLButtonElement>('notification-refresh').addEventListener(
+  'click',
+  () => void loadNotificationSummary(),
+);
 
 loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
@@ -1041,6 +1201,7 @@ initializeReportDates();
 updateReportPeriodControls();
 renderReportSortState();
 renderMembershipSortState();
+updateNotificationCounters();
 
 void (async () => {
   try {

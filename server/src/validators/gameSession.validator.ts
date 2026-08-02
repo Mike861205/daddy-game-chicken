@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { mexicanPhoneSchema } from './phone.validator.js';
 
 /**
  * Allowed branch identifiers. Kept in sync with the seeded configuration.
@@ -24,11 +25,7 @@ export const createGameSessionSchema = z.object({
   missedItems: z.number().int().min(0).max(10_000).default(0),
   livesRemaining: z.number().int().min(0).max(5).default(0),
   clientSessionId: z.string().uuid('clientSessionId debe ser un UUID válido.'),
-  phone: z
-    .string()
-    .trim()
-    .regex(/^[0-9+\-\s]{7,20}$/u, 'Teléfono inválido.')
-    .optional(),
+  phone: mexicanPhoneSchema.optional(),
 });
 
 export type CreateGameSessionInput = z.infer<typeof createGameSessionSchema>;
@@ -66,10 +63,7 @@ export type LeaderboardQuery = z.infer<typeof leaderboardQuerySchema>;
  * Query schema for looking up a returning player by phone number.
  */
 export const playerLookupQuerySchema = z.object({
-  phone: z
-    .string()
-    .trim()
-    .regex(/^[0-9+\-\s]{7,20}$/u, 'Teléfono inválido.'),
+  phone: mexicanPhoneSchema,
 });
 
 export type PlayerLookupQuery = z.infer<typeof playerLookupQuerySchema>;

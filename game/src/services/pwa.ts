@@ -32,6 +32,14 @@ const INSTALLED_KEY = 'daddy-pollo-pwa-installed';
 const REMINDERS_KEY = 'daddy-pollo-reminders-enabled';
 const REMINDER_TAG = 'daddy-pollo-play-reminder';
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+const PLAYER_PHONE_KEY = 'dgc.playerPhone';
+
+function urlBase64ToUint8Array(value: string): Uint8Array<ArrayBuffer> {
+  const padding = '='.repeat((4 - (value.length % 4)) % 4);
+  const base64 = (value + padding).replace(/-/gu, '+').replace(/_/gu, '/');
+  const raw = window.atob(base64);
+  return Uint8Array.from(raw, (character) => character.charCodeAt(0));
+}
 
 class PwaManager {
   private initialized = false;
@@ -148,6 +156,8 @@ class PwaManager {
       const registration =
         (await navigator.serviceWorker.ready) as ServiceWorkerRegistrationWithPeriodicSync;
 
+      await this.saveRemotePushSubscription(registration);
+
       await registration.showNotification('Recordatorios activados', {
         body: 'Las notificaciones de Daddy Pollo quedaron permitidas en este dispositivo.',
         icon: '/assets/icons/daddy-pollo-pwa-192.png',
@@ -168,6 +178,23 @@ class PwaManager {
       return permission;
     } catch {
       return 'error';
+    }
+  }
+
+  async syncPushSubscription(): Promise<void> {
+    if (
+      !('serviceWorker' in navigator) ||
+      !('Notification' in window) ||
+      Notification.permission !== 'granted'
+    ) {
+      return;
+    }
+    try {
+      const registration =
+        (await navigator.serviceWorker.ready) as ServiceWorkerRegistrationWithPeriodicSync;
+      await this.saveRemotePushSubscription(registration);
+    } catch {
+      // The next explicit notification activation will retry the server sync.
     }
   }
 
@@ -195,6 +222,49 @@ class PwaManager {
   private emit(): void {
     const state = this.getState();
     this.listeners.forEach((listener) => listener(state));
+  }
+
+  private async saveRemotePushSubscription(
+    registration: ServiceWorkerRegistration,
+  ): Promise<void> {
+    if (!registration.pushManager) {
+      throw new Error('Push no disponible');
+    }
+
+    const configResponse = await fetch('/api/push/public-key', {
+      headers: { Accept: 'application/json' },
+    });
+    if (!configResponse.ok) throw new Error('Configuración push no disponible');
+    const configBody = (await configResponse.json()) as {
+      data?: { enabled: boolean; publicKey: string };
+    };
+    if (!configBody.data?.enabled || !configBody.data.publicKey) {
+      throw new Error('Push no configurado');
+    }
+
+    const subscription =
+      (await registration.pushManager.getSubscription()) ??
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(configBody.data.publicKey),
+      }));
+    const serialized = subscription.toJSON();
+    if (!serialized.endpoint || !serialized.keys?.p256dh || !serialized.keys.auth) {
+      throw new Error('Suscripción push incompleta');
+    }
+
+    const phone = this.safeStorageGet(PLAYER_PHONE_KEY) ?? '';
+    const response = await fetch('/api/push/subscriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        endpoint: serialized.endpoint,
+        keys: serialized.keys,
+        ...(phone ? { phone } : {}),
+        installed: this.getState().installed,
+      }),
+    });
+    if (!response.ok) throw new Error('No se pudo guardar la suscripción push');
   }
 
   private safeStorageGet(key: string): string | null {

@@ -88,15 +88,41 @@ self.addEventListener('periodicsync', (event) => {
   );
 });
 
+self.addEventListener('push', (event) => {
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+
+  const title = payload.title || 'Daddy Pollo';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: payload.body || 'Tenemos novedades para ti.',
+      icon: '/assets/icons/daddy-pollo-pwa-192.png',
+      badge: '/assets/icons/daddy-pollo-pwa-192.png',
+      tag: payload.tag || 'daddy-pollo-message',
+      data: { url: payload.url || '/' },
+    }),
+  );
+});
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
+  const targetPath =
+    typeof event.notification.data?.url === 'string' &&
+    event.notification.data.url.startsWith('/') &&
+    !event.notification.data.url.startsWith('//')
+      ? event.notification.data.url
+      : '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const existingClient = clients.find((client) => new URL(client.url).origin === self.location.origin);
       if (existingClient) {
-        return existingClient.focus();
+        return existingClient.navigate(targetPath).then(() => existingClient.focus());
       }
-      return self.clients.openWindow('/');
+      return self.clients.openWindow(targetPath);
     }),
   );
 });

@@ -178,6 +178,40 @@ export const EMPTY_MEMBERSHIP: MembershipEntitlement = {
   monthlyBenefit: null,
 };
 
+/**
+ * Local Vite sessions can exercise every paid feature without Stripe. Vite
+ * replaces DEV with false in production builds, so deployed clients continue
+ * to depend exclusively on the entitlement returned by the API.
+ */
+export function withLocalDevelopmentAccess(
+  membership: MembershipEntitlement | null | undefined,
+): MembershipEntitlement {
+  if (!import.meta.env.DEV) {
+    return membership ?? { ...EMPTY_MEMBERSHIP };
+  }
+
+  const planId = membership?.planId ?? 'daddy-elite';
+  return {
+    ...membership,
+    planId,
+    status: 'active',
+    selectedOutfit: membership?.selectedOutfit ?? EMPTY_MEMBERSHIP.selectedOutfit,
+    selectedWeapon: membership?.selectedWeapon ?? EMPTY_MEMBERSHIP.selectedWeapon,
+    currentPeriodEnd: membership?.currentPeriodEnd ?? null,
+    cancelAtPeriodEnd: membership?.cancelAtPeriodEnd ?? false,
+    monthlyBenefit: planId === 'daddy-elite'
+      ? membership?.monthlyBenefit ?? {
+        available: true,
+        label: 'Papas con pollo chico + refresco de 325 ml',
+      }
+      : null,
+  };
+}
+
+export function isOutfitAvailable(unlockWorld: number, maxWorldUnlocked: number): boolean {
+  return import.meta.env.DEV || maxWorldUnlocked >= unlockWorld;
+}
+
 export function hasActiveMembership(
   membership: MembershipEntitlement | null | undefined,
 ): membership is MembershipEntitlement & { planId: MembershipPlanId } {
