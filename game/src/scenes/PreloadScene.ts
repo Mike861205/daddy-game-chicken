@@ -9,7 +9,7 @@ import { WORLDS } from '../config/worlds.js';
  * Loads game assets behind a branded cinematic that previews all eight worlds.
  */
 export class PreloadScene extends Phaser.Scene {
-  private static readonly INTRO_DURATION_MS = 8800;
+  private static readonly INTRO_DURATION_MS = 3000;
   private introStartedAt = 0;
   private progressAnimationFrame = 0;
   private introWorldIndex = -1;
@@ -37,6 +37,10 @@ export class PreloadScene extends Phaser.Scene {
       'daddy-pollo-armed-anim',
       `${imageBase}/daddy-pollo-armed-anim.png?v=${assetVersion}`,
       { frameWidth: 512, frameHeight: 512 },
+    );
+    this.load.image(
+      'daddy-pollo-fire-back',
+      `${imageBase}/daddy-pollo-fire-back.png?v=rear-fire-pose-20260802`,
     );
     this.load.spritesheet(
       'enemigos-anim',
@@ -76,6 +80,15 @@ export class PreloadScene extends Phaser.Scene {
       'skin-fenix-elemental',
     ]) {
       this.load.image(skin, `${imageBase}/${skin}.png?v=membership-20260725`);
+      this.load.spritesheet(
+        `${skin}-anim`,
+        `${imageBase}/${skin}-anim.png?v=membership-animation-20260802`,
+        { frameWidth: 512, frameHeight: 512 },
+      );
+      this.load.image(
+        `${skin}-fire-back`,
+        `${imageBase}/${skin}-fire-back.png?v=rear-fire-pose-20260802`,
+      );
     }
     for (const rewardAsset of [
       'vip-tridente-plasma',

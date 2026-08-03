@@ -32,6 +32,11 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
+  // Development must always show the latest sprites and source changes.
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return;
+  }
+
   if (
     request.method !== 'GET' ||
     url.origin !== self.location.origin ||

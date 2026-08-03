@@ -34,10 +34,6 @@ type MembershipTab = 'plans' | 'wardrobe' | 'arsenal';
 
 interface AnimatedCharacterRig {
   root: Phaser.GameObjects.Container;
-  head: Phaser.GameObjects.Container;
-  hands: Phaser.GameObjects.Container;
-  leftFoot: Phaser.GameObjects.Container;
-  rightFoot: Phaser.GameObjects.Container;
 }
 
 /**
@@ -396,7 +392,7 @@ export class MembershipScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     const subtitle = this.add
-      .text(GAME_WIDTH / 2, 55, 'Dos estilos inmediatos • Dos se conquistan jugando', {
+      .text(GAME_WIDTH / 2, 55, 'Original + cuatro estilos exclusivos', {
         fontFamily: 'Trebuchet MS, Arial, sans-serif',
         fontSize: '16px',
         color: '#cfe0ff',
@@ -404,64 +400,67 @@ export class MembershipScene extends Phaser.Scene {
       .setOrigin(0.5);
     this.content?.add([title, subtitle]);
 
-    const skins = OUTFITS.filter((outfit) => outfit.id !== 'clasico');
-    skins.forEach((outfit, index) => {
+    OUTFITS.forEach((outfit, index) => {
       const column = index % 2;
       const row = Math.floor(index / 2);
-      const x = 190 + column * 340;
-      const y = 290 + row * 440;
+      const lastCard = index === OUTFITS.length - 1 && OUTFITS.length % 2 === 1;
+      const x = lastCard ? GAME_WIDTH / 2 : 190 + column * 340;
+      const y = 225 + row * 320;
       this.addOutfitCard(x, y, outfit);
     });
   }
 
   private addOutfitCard(x: number, y: number, outfit: (typeof OUTFITS)[number]): void {
     const activeMember = hasActiveMembership(this.membership);
+    const isClassic = outfit.id === 'clasico';
     const worldUnlocked = isOutfitAvailable(
       outfit.unlockWorld,
       storage.getMaxWorldUnlocked(),
     );
-    const unlocked = activeMember && worldUnlocked;
+    const unlocked = isClassic || (activeMember && worldUnlocked);
     const selected = storage.getSelectedOutfit() === outfit.id;
     const card = this.add.container(x, y);
     const bg = this.add
-      .rectangle(0, 0, 300, 390, selected ? 0x123f74 : 0x07152e, 0.98)
+      .rectangle(0, 0, 280, 286, selected ? 0x123f74 : 0x07152e, 0.98)
       .setStrokeStyle(4, selected ? COLORS.yellow : unlocked ? COLORS.neon : 0x52617c, 1)
       .setInteractive({ useHandCursor: unlocked });
     const portrait = this.createAnimatedCharacterRig(
       0,
-      -48,
+      -34,
       outfit.textureKey,
-      230,
+      170,
       unlocked ? 1 : 0.34,
       OUTFITS.indexOf(outfit) * 190,
     );
     const name = this.add
-      .text(0, 105, outfit.name.toUpperCase(), {
+      .text(0, 72, outfit.name.toUpperCase(), {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '20px',
+        fontSize: '17px',
         color: selected ? COLORS_HEX.yellow : '#ffffff',
         stroke: '#020817',
         strokeThickness: 4,
       })
       .setOrigin(0.5);
-    const lockLabel = !activeMember
+    const lockLabel = selected
+      ? 'EQUIPADO'
+      : isClassic
+        ? outfit.tagline.toUpperCase()
+        : !activeMember
       ? 'REQUIERE MEMBRESIA'
       : !worldUnlocked
         ? `BLOQUEADO • MUNDO ${outfit.unlockWorld}`
-        : selected
-          ? 'EQUIPADO'
-          : outfit.tagline.toUpperCase();
+        : outfit.tagline.toUpperCase();
     const state = this.add
-      .text(0, 145, lockLabel, {
+      .text(0, 111, lockLabel, {
         fontFamily: 'Arial Black, sans-serif',
-        fontSize: '13px',
+        fontSize: '11px',
         color: selected ? COLORS_HEX.yellow : unlocked ? COLORS_HEX.neon : '#9aa8c0',
       })
       .setOrigin(0.5);
     const lock = this.add
-      .text(0, -50, unlocked ? '' : '🔒', {
+      .text(0, -34, unlocked ? '' : '🔒', {
         fontFamily: 'Arial, sans-serif',
-        fontSize: '54px',
+        fontSize: '42px',
       })
       .setOrigin(0.5);
     card.add([bg, portrait.root, name, state, lock]);
@@ -735,11 +734,8 @@ export class MembershipScene extends Phaser.Scene {
     this.content?.add(card);
   }
 
-  /**
-   * Builds a lightweight four-part rig from the existing transparent outfit.
-   * The overlapping crops keep the original artwork intact while letting the
-   * head, crossed hands and each foot move independently.
-   */
+  /** Shows the real six-pose sprite sheet, with a layered fallback for assets
+   * that do not yet provide animation frames. */
   private createAnimatedCharacterRig(
     x: number,
     y: number,
@@ -748,6 +744,32 @@ export class MembershipScene extends Phaser.Scene {
     alpha: number,
     phase: number,
   ): AnimatedCharacterRig {
+    const animatedTexture = textureKey === 'daddy-pollo'
+      ? 'daddy-pollo-anim'
+      : `${textureKey}-anim`;
+    if (this.textures.exists(animatedTexture)) {
+      const root = this.add.container(x, y);
+      const sprite = this.add
+        .sprite(0, 0, animatedTexture, 0)
+        .setDisplaySize(displaySize, displaySize)
+        .setAlpha(alpha);
+      const animationKey = `${animatedTexture}-membership-preview`;
+      if (!this.anims.exists(animationKey)) {
+        this.anims.create({
+          key: animationKey,
+          frames: this.anims.generateFrameNumbers(animatedTexture, {
+            frames: [0, 1, 2, 3, 4, 5],
+          }),
+          frameRate: 4,
+          repeat: -1,
+          repeatDelay: 420,
+        });
+      }
+      sprite.play({ key: animationKey, startFrame: Math.floor(phase / 190) % 6 });
+      root.add(sprite);
+      return { root };
+    }
+
     const frame = this.textures.getFrame(textureKey);
     const sourceWidth = frame?.realWidth ?? 1;
     const sourceHeight = frame?.realHeight ?? 1;
@@ -873,7 +895,7 @@ export class MembershipScene extends Phaser.Scene {
       ease: 'Sine.inOut',
     });
 
-    return { root, head, hands, leftFoot, rightFoot };
+    return { root };
   }
 
   private animateWeaponPreview(

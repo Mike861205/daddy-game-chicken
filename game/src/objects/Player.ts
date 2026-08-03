@@ -27,6 +27,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private animationPrefix = 'daddy';
   private usingIntegratedBlaster = false;
   private readonly customOutfitTexture: string | null;
+  private animationTextureKey: string;
+  private readonly firePoseTextureKey: string | null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, outfitTexture?: string) {
     const armedTexture = scene.textures.exists('daddy-pollo-armed-anim');
@@ -35,7 +37,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       outfitTexture && outfitTexture !== 'daddy-pollo' && scene.textures.exists(outfitTexture)
         ? outfitTexture
         : null;
-    const textureKey = customOutfitTexture ?? (armedTexture
+    const customAnimationTexture = customOutfitTexture
+      && scene.textures.exists(`${customOutfitTexture}-anim`)
+      ? `${customOutfitTexture}-anim`
+      : null;
+    const textureKey = customAnimationTexture ?? customOutfitTexture ?? (armedTexture
       ? 'daddy-pollo-armed-anim'
       : animatedTexture
         ? 'daddy-pollo-anim'
@@ -45,12 +51,18 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       x,
       y,
       textureKey,
-      !customOutfitTexture && (armedTexture || animatedTexture) ? 0 : undefined,
+      customAnimationTexture || (!customOutfitTexture && (armedTexture || animatedTexture))
+        ? 0
+        : undefined,
     );
     this.customOutfitTexture = customOutfitTexture;
-    this.hasAnimationSheet = !customOutfitTexture && (armedTexture || animatedTexture);
+    this.animationTextureKey = textureKey;
+    const firePoseKey = `${customOutfitTexture ?? 'daddy-pollo'}-fire-back`;
+    this.firePoseTextureKey = scene.textures.exists(firePoseKey) ? firePoseKey : null;
+    this.hasAnimationSheet = Boolean(customAnimationTexture)
+      || (!customOutfitTexture && (armedTexture || animatedTexture));
     this.usingIntegratedBlaster = !customOutfitTexture && armedTexture;
-    this.animationPrefix = armedTexture ? 'daddy-armed' : 'daddy';
+    this.animationPrefix = customAnimationTexture ?? (armedTexture ? 'daddy-armed' : 'daddy');
     this.groundY = y;
     scene.add.existing(this);
     scene.physics.add.existing(this);
@@ -206,8 +218,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.baseScaleY * (1 - breathing * 0.026 + stretch - recoilSquash * 0.55),
     );
 
-    const movementLean = Phaser.Math.Clamp(body.velocity.x * 0.009, -4, 4);
-    const idleLean = speedRatio < 0.08 ? Math.sin(now * 0.0023) * 1.8 : 0;
+    const movementLean = recoil ? 0 : Phaser.Math.Clamp(body.velocity.x * 0.009, -4, 4);
+    const idleLean = recoil ? 0 : speedRatio < 0.08 ? Math.sin(now * 0.0023) * 1.8 : 0;
     const celebrateWiggle = celebrating ? Math.sin(now * 0.045) * 7 : 0;
     this.angle = Phaser.Math.Linear(
       this.angle,
@@ -232,7 +244,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   fireRecoil(): void {
-    this.recoilUntil = this.scene.time.now + 190;
+    this.recoilUntil = this.scene.time.now + 240;
   }
 
   getFacingDirection(): -1 | 1 {
@@ -256,6 +268,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.stop();
     this.setTexture(nextTexture, 0);
+    this.animationTextureKey = nextTexture;
     this.usingIntegratedBlaster = nextIntegrated;
     this.animationPrefix = nextIntegrated ? 'daddy-armed' : 'daddy';
     this.hasAnimationSheet = true;
@@ -361,13 +374,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    let nextState: 'cover' | 'hit' | 'fire' | 'run' | 'idle';
+    let nextState: 'cover' | 'hit' | 'fire' | 'jump' | 'run' | 'idle';
     if (this.covering) {
       nextState = 'cover';
     } else if (now < this.hitUntil) {
       nextState = 'hit';
     } else if (now < this.recoilUntil) {
       nextState = 'fire';
+    } else if (this.customOutfitTexture && this.jumping) {
+      nextState = 'jump';
     } else if (speedRatio > 0.08) {
       nextState = 'run';
     } else {
@@ -375,6 +390,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     }
 
     if (nextState === this.visualState) {
+      if (nextState === 'fire' && this.firePoseTextureKey) {
+        this.setFlipX(false);
+      }
       return;
     }
     this.visualState = nextState;
@@ -382,7 +400,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.play(`${this.animationPrefix}-${nextState}`, true);
     } else {
       this.stop();
-      this.setFrame(nextState === 'fire' ? 4 : 5);
+      if (nextState === 'fire' && this.firePoseTextureKey) {
+        this.setTexture(this.firePoseTextureKey);
+        this.setFlipX(false);
+      } else {
+        this.setTexture(this.animationTextureKey, nextState === 'fire' ? 4 : 5);
+      }
     }
   }
 }

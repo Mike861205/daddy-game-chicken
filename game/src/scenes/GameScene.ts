@@ -41,6 +41,7 @@ import { CombatBike } from '../objects/CombatBike.js';
 import { Enemy } from '../objects/Enemy.js';
 import { FallingItem } from '../objects/FallingItem.js';
 import { Player } from '../objects/Player.js';
+import { WorldAmbience } from '../objects/WorldAmbience.js';
 import { audioManager } from '../services/audio.js';
 import { DEFAULT_CONFIG } from '../services/api.js';
 import { removeRegistrationOverlays } from '../services/registrationForm.js';
@@ -55,8 +56,13 @@ interface TouchControl {
 
 interface VipAbilityControl {
   visual: Phaser.GameObjects.Container;
-  label: Phaser.GameObjects.Text;
-  button: Phaser.GameObjects.Rectangle;
+  icon: Phaser.GameObjects.Image;
+  status: Phaser.GameObjects.Text;
+  button: Phaser.GameObjects.Arc;
+  progress: Phaser.GameObjects.Graphics;
+  glow: Phaser.GameObjects.Arc;
+  color: number;
+  stateKey: string;
 }
 
 interface BossProjectileOptions {
@@ -157,11 +163,11 @@ export class GameScene extends Phaser.Scene {
   private bossNameText!: Phaser.GameObjects.Text;
   private bossHealthBg!: Phaser.GameObjects.Rectangle;
   private bossHealthFill!: Phaser.GameObjects.Rectangle;
-  private equippedWeaponSprite?: Phaser.GameObjects.Image;
   private backgroundImage?: Phaser.GameObjects.Image;
   private worldColorOverlay?: Phaser.GameObjects.Rectangle;
   private worldTransitionOverlay?: Phaser.GameObjects.Container;
   private worldTransitionTrail?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private worldAmbience?: WorldAmbience;
 
   // Timers.
   private spawnTimer?: Phaser.Time.TimerEvent;
@@ -378,30 +384,48 @@ export class GameScene extends Phaser.Scene {
       .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
       .setAlpha(0.72)
       .setDepth(0);
+    this.prepareAnimatedBackground(this.backgroundImage);
     this.worldColorOverlay = this.add
       .rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, this.currentWorld.color, 0.055)
       .setOrigin(0)
       .setDepth(0.5);
 
-    // Slow glints give the arena depth without competing with the pickups.
-    const ambience = this.add.particles(0, 0, '__WHITE', {
-      x: { min: 24, max: GAME_WIDTH - 24 },
-      y: { min: 190, max: GAME_HEIGHT - 190 },
-      lifespan: { min: 2200, max: 4400 },
-      speedY: { min: -24, max: -8 },
-      speedX: { min: -6, max: 6 },
-      scale: { start: 0.18, end: 0 },
-      alpha: { start: 0.42, end: 0 },
-      tint: [0x43d9ff, 0x21e6c1, 0xffffff],
-      frequency: 240,
-      blendMode: 'ADD',
-    });
-    ambience.setDepth(1);
+    this.worldAmbience = new WorldAmbience(this);
+    this.worldAmbience.activate(this.currentWorld);
 
     // Ground line.
     const ground = this.add.graphics();
     ground.fillStyle(COLORS.yellow, 1);
     ground.fillRect(0, GAME_HEIGHT - 130, GAME_WIDTH, 8);
+    ground.setDepth(3);
+  }
+
+  private prepareAnimatedBackground(image: Phaser.GameObjects.Image): void {
+    image.setData('ambientBaseScaleX', image.scaleX);
+    image.setData('ambientBaseScaleY', image.scaleY);
+  }
+
+  private updateBackgroundMotion(time: number): void {
+    if (!this.backgroundImage?.active) {
+      return;
+    }
+    const image = this.backgroundImage;
+    const baseScaleX = Number(image.getData('ambientBaseScaleX')) || image.scaleX;
+    const baseScaleY = Number(image.getData('ambientBaseScaleY')) || image.scaleY;
+    const world = this.currentWorld.id;
+    const phase = time * (world === 2 ? 0.00065 : 0.00042) + world * 0.73;
+    const zoom = 1.035 + Math.sin(phase * 0.54) * 0.006;
+    const horizontalDrift = world === 6 ? 4.2 : world === 8 ? 3.4 : 2.2;
+    const verticalDrift = world === 1 || world === 2 || world === 3 ? 3.6 : 2.1;
+    const rocking = world === 2 ? Math.sin(phase * 0.68) * 0.22 : 0;
+
+    image
+      .setPosition(
+        GAME_WIDTH / 2 + Math.sin(phase) * horizontalDrift,
+        GAME_HEIGHT / 2 + Math.cos(phase * 0.82) * verticalDrift,
+      )
+      .setScale(baseScaleX * zoom, baseScaleY * zoom)
+      .setAngle(rocking);
   }
 
   private transitionWorldBackground(world: WorldDefinition): void {
@@ -413,9 +437,11 @@ export class GameScene extends Phaser.Scene {
       .setDisplaySize(GAME_WIDTH, GAME_HEIGHT)
       .setAlpha(0)
       .setDepth(0);
+    this.prepareAnimatedBackground(incoming);
     const outgoing = this.backgroundImage;
     this.backgroundImage = incoming;
     this.worldColorOverlay?.setFillStyle(world.color, 0.055);
+    this.worldAmbience?.activate(world);
     this.tweens.add({
       targets: incoming,
       alpha: 0.72,
@@ -974,46 +1000,69 @@ export class GameScene extends Phaser.Scene {
     this.input.on('gameout', () => this.clearTouchControls());
   }
 
+  private getElitePowerTexture(): string {
+    return [
+      'poder-rayos-cielo',
+      'poder-fuego-arrasador',
+      'poder-terremoto-daddy',
+    ][(this.currentWorld.id - 1) % 3];
+  }
+
   private createMembershipControls(): void {
     if (!hasActiveMembership(this.membership)) {
       return;
     }
     const elite = isEliteMembership(this.membership);
-    const y = 318;
+    const x = GAME_WIDTH - 68;
+    const weaponTexture: Record<PremiumWeaponId, string> = {
+      'plasma-neon': 'vip-tridente-plasma',
+      'misil-sabor': 'vip-misil-sabor',
+      'rayo-poseidon': 'vip-rayo-poseidon',
+    };
     if (elite) {
       this.premiumWeaponControl = this.makeVipAbilityButton(
-        105,
-        y,
-        '1 • ARMA VIP',
+        x,
+        GAME_HEIGHT - 490,
+        weaponTexture[this.membership.selectedWeapon],
+        'ARMA VIP',
+        '1',
         0x8c35d8,
         () => this.activatePremiumWeapon(),
       );
       this.elitePowerControl = this.makeVipAbilityButton(
-        360,
-        y,
-        '2 • PODER 25%',
+        x,
+        GAME_HEIGHT - 350,
+        this.getElitePowerTexture(),
+        'PODER',
+        '2',
         0xe6262b,
         () => this.activateElitePower(),
       );
       this.premiumPlaneControl = this.makeVipAbilityButton(
-        615,
-        y,
-        '3 • AVION',
+        x,
+        GAME_HEIGHT - 210,
+        'avion-daddy',
+        'AVIÓN',
+        '3',
         0x1450c8,
         () => this.activatePremiumPlane(),
       );
     } else {
       this.premiumWeaponControl = this.makeVipAbilityButton(
-        205,
-        y,
-        '1 • ARMA VIP',
+        x,
+        GAME_HEIGHT - 390,
+        weaponTexture[this.membership.selectedWeapon],
+        'ARMA VIP',
+        '1',
         0x8c35d8,
         () => this.activatePremiumWeapon(),
       );
       this.premiumPlaneControl = this.makeVipAbilityButton(
-        515,
-        y,
-        '3 • AVION',
+        x,
+        GAME_HEIGHT - 230,
+        'avion-daddy',
+        'AVIÓN',
+        '3',
         0x1450c8,
         () => this.activatePremiumPlane(),
       );
@@ -1137,76 +1186,33 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private showMembershipAssetToast(
-    texture: string,
-    title: string,
-    detail: string,
-    color: number,
-  ): void {
-    const toast = this.add
-      .container(GAME_WIDTH / 2, 455)
-      .setDepth(82)
-      .setScrollFactor(0)
-      .setAlpha(0)
-      .setScale(0.86);
-    const bg = this.add
-      .rectangle(0, 0, 470, 112, 0x06142e, 0.97)
-      .setStrokeStyle(3, color, 1);
-    const image = this.add.image(-172, 0, texture).setDisplaySize(112, 86);
-    const heading = this.add
-      .text(-92, -19, title, {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '18px',
-        color: '#ffffff',
-        stroke: '#020718',
-        strokeThickness: 4,
-      })
-      .setOrigin(0, 0.5);
-    const copy = this.add
-      .text(-92, 22, detail, {
-        fontFamily: 'Arial Black, sans-serif',
-        fontSize: '13px',
-        color: `#${color.toString(16).padStart(6, '0')}`,
-      })
-      .setOrigin(0, 0.5);
-    toast.add([bg, image, heading, copy]);
-    this.tweens.add({
-      targets: toast,
-      alpha: 1,
-      scale: 1,
-      duration: 250,
-      ease: 'Back.out',
-      onComplete: () => {
-        this.time.delayedCall(1500, () => {
-          this.tweens.add({
-            targets: toast,
-            alpha: 0,
-            y: 420,
-            duration: 280,
-            onComplete: () => toast.destroy(true),
-          });
-        });
-      },
-    });
-  }
-
   private makeVipAbilityButton(
     x: number,
     y: number,
+    texture: string,
     label: string,
+    shortcut: string,
     color: number,
     onPress: () => void,
   ): VipAbilityControl {
-    const visual = this.add.container(x, y).setDepth(42).setScrollFactor(0);
+    const visual = this.add.container(x, y).setDepth(48).setScrollFactor(0);
     const glow = this.add
-      .rectangle(0, 3, 196, 62, color, 0.18)
-      .setStrokeStyle(3, color, 0.35);
+      .circle(0, 0, 55, color, 0.14)
+      .setStrokeStyle(3, color, 0.34)
+      .setBlendMode(Phaser.BlendModes.ADD);
     const button = this.add
-      .rectangle(0, 0, 188, 54, color, 0.94)
-      .setStrokeStyle(3, 0xffffff, 0.9)
+      .circle(0, 0, 47, 0x06142e, 0.96)
+      .setStrokeStyle(4, color, 0.94)
       .setInteractive({ useHandCursor: true });
-    const text = this.add
-      .text(0, 0, label, {
+    const progress = this.add.graphics();
+    const icon = this.add
+      .image(0, -2, texture)
+      .setDisplaySize(69, 61);
+    const shortcutBg = this.add
+      .circle(-38, -38, 14, color, 1)
+      .setStrokeStyle(2, 0xffffff, 0.95);
+    const shortcutText = this.add
+      .text(-38, -38, shortcut, {
         fontFamily: 'Arial Black, sans-serif',
         fontSize: '15px',
         color: '#ffffff',
@@ -1214,9 +1220,42 @@ export class GameScene extends Phaser.Scene {
         strokeThickness: 3,
       })
       .setOrigin(0.5);
-    visual.add([glow, button, text]);
+    const name = this.add
+      .text(0, 57, label, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '12px',
+        color: '#ffffff',
+        stroke: '#020718',
+        strokeThickness: 4,
+      })
+      .setOrigin(0.5);
+    const status = this.add
+      .text(0, 76, 'LISTO', {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '12px',
+        color: '#9ffcff',
+        stroke: '#020718',
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5);
+    visual.add([
+      glow,
+      button,
+      progress,
+      icon,
+      shortcutBg,
+      shortcutText,
+      name,
+      status,
+    ]);
     button.on('pointerdown', () => visual.setScale(0.95));
-    button.on('pointerup', () => {
+    button.on('pointerup', (
+      _pointer: Phaser.Input.Pointer,
+      _localX: number,
+      _localY: number,
+      event: Phaser.Types.Input.EventData,
+    ) => {
+      event.stopPropagation();
       visual.setScale(1);
       this.triggerControlHaptic();
       onPress();
@@ -1229,7 +1268,16 @@ export class GameScene extends Phaser.Scene {
       yoyo: true,
       repeat: -1,
     });
-    return { visual, label: text, button };
+    return {
+      visual,
+      icon,
+      status,
+      button,
+      progress,
+      glow,
+      color,
+      stateKey: '',
+    };
   }
 
   private updateMembershipControls(): void {
@@ -1239,27 +1287,150 @@ export class GameScene extends Phaser.Scene {
     const weaponUsed = this.premiumWeaponUsedWorlds.has(world);
     if (this.premiumWeaponControl) {
       const seconds = Math.max(0, Math.ceil((this.premiumWeaponActiveUntil - this.time.now) / 1000));
-      this.premiumWeaponControl.label.setText(
-        weaponActive ? `1 • VIP ${seconds}s` : weaponUsed ? '1 • USADA' : '1 • ARMA VIP',
+      this.setVipAbilityState(
+        this.premiumWeaponControl,
+        weaponActive ? seconds / 15 : weaponUsed ? 0 : 1,
+        weaponActive ? `${seconds}s` : weaponUsed ? 'USADA' : 'LISTA',
+        weaponUsed && !weaponActive,
+        weaponActive,
       );
-      this.premiumWeaponControl.button.setAlpha(weaponUsed && !weaponActive ? 0.42 : 0.96);
     }
     const planeActive = this.premiumPlaneExpiresAt > this.time.now;
     const planeUsed = this.premiumPlaneUsedWorlds.has(world);
     if (this.premiumPlaneControl) {
       const seconds = Math.max(0, Math.ceil((this.premiumPlaneExpiresAt - this.time.now) / 1000));
-      this.premiumPlaneControl.label.setText(
-        planeActive ? `3 • AVION ${seconds}s` : planeUsed ? '3 • USADO' : '3 • AVION',
+      this.setVipAbilityState(
+        this.premiumPlaneControl,
+        planeActive ? seconds / 10 : planeUsed ? 0 : 1,
+        planeActive ? `${seconds}s` : planeUsed ? 'USADO' : 'LISTO',
+        planeUsed && !planeActive,
+        planeActive,
       );
-      this.premiumPlaneControl.button.setAlpha(planeUsed && !planeActive ? 0.42 : 0.96);
     }
     if (this.elitePowerControl) {
       const used = this.elitePowerUsedWorlds.has(world);
-      this.elitePowerControl.label.setText(
-        used ? '2 • USADO' : `2 • PODER ${Math.round(this.elitePowerCharge)}%`,
+      this.elitePowerControl.icon.setTexture(this.getElitePowerTexture());
+      this.setVipAbilityState(
+        this.elitePowerControl,
+        used ? 0 : this.elitePowerCharge / 100,
+        used ? 'USADO' : this.elitePowerCharge >= 100
+          ? 'LISTO'
+          : `${Math.round(this.elitePowerCharge)}%`,
+        used,
+        !used && this.elitePowerCharge >= 100,
       );
-      this.elitePowerControl.button.setAlpha(used ? 0.42 : 0.96);
     }
+  }
+
+  private setVipAbilityState(
+    control: VipAbilityControl,
+    ratio: number,
+    status: string,
+    disabled: boolean,
+    active: boolean,
+  ): void {
+    const progress = Phaser.Math.Clamp(ratio, 0, 1);
+    const stateKey = `${status}|${Math.round(progress * 100)}|${disabled}|${active}`;
+    if (control.stateKey === stateKey) {
+      return;
+    }
+    control.stateKey = stateKey;
+    control.progress.clear();
+    control.progress.lineStyle(7, 0xffffff, 0.13);
+    control.progress.strokeCircle(0, 0, 51);
+    if (progress > 0) {
+      control.progress.lineStyle(7, control.color, disabled ? 0.2 : 1);
+      control.progress.beginPath();
+      control.progress.arc(
+        0,
+        0,
+        51,
+        -Math.PI / 2,
+        -Math.PI / 2 + Math.PI * 2 * progress,
+      );
+      control.progress.strokePath();
+    }
+    control.status
+      .setText(status)
+      .setColor(disabled ? '#70809c' : active ? '#fff36b' : '#9ffcff');
+    control.icon.setAlpha(disabled ? 0.28 : 1);
+    control.button
+      .setAlpha(disabled ? 0.62 : 1)
+      .setStrokeStyle(4, disabled ? 0x52637e : control.color, disabled ? 0.48 : 0.96);
+    control.glow.setVisible(!disabled).setAlpha(active ? 0.9 : 0.42);
+  }
+
+  private showAbilityStatus(
+    control: VipAbilityControl | undefined,
+    message: string,
+    color: number,
+  ): void {
+    if (!control) return;
+    const toast = this.add.container(control.visual.x - 66, control.visual.y).setDepth(83);
+    const panel = this.add
+      .rectangle(0, 0, 152, 40, 0x06142e, 0.94)
+      .setOrigin(1, 0.5)
+      .setStrokeStyle(2, color, 0.9);
+    const text = this.add
+      .text(-12, 0, message, {
+        fontFamily: 'Arial Black, sans-serif',
+        fontSize: '13px',
+        color: '#ffffff',
+        stroke: '#020718',
+        strokeThickness: 3,
+      })
+      .setOrigin(1, 0.5);
+    toast.add([panel, text]);
+    this.tweens.add({
+      targets: toast,
+      x: toast.x - 28,
+      alpha: { from: 1, to: 0 },
+      duration: 900,
+      hold: 300,
+      ease: 'Cubic.out',
+      onComplete: () => toast.destroy(true),
+    });
+  }
+
+  private pulseAbilityControl(
+    control: VipAbilityControl | undefined,
+    color: number,
+    message: string,
+  ): void {
+    if (!control) return;
+    this.tweens.add({
+      targets: control.visual,
+      scale: { from: 0.82, to: 1.12 },
+      duration: 180,
+      yoyo: true,
+      ease: 'Back.out',
+    });
+    for (let index = 0; index < 3; index += 1) {
+      const ring = this.add
+        .circle(control.visual.x, control.visual.y, 48, color, 0)
+        .setStrokeStyle(5 - index, color, 0.85)
+        .setDepth(47);
+      this.tweens.add({
+        targets: ring,
+        scale: 1.8 + index * 0.34,
+        alpha: 0,
+        duration: 520 + index * 120,
+        delay: index * 70,
+        ease: 'Cubic.out',
+        onComplete: () => ring.destroy(),
+      });
+    }
+    const burst = this.add.particles(control.visual.x, control.visual.y, '__WHITE', {
+      speed: { min: 75, max: 190 },
+      lifespan: { min: 280, max: 520 },
+      scale: { start: 0.34, end: 0 },
+      alpha: { start: 0.9, end: 0 },
+      tint: [color, 0xffffff, COLORS.yellow],
+      quantity: 18,
+      blendMode: 'ADD',
+    }).setDepth(49);
+    this.time.delayedCall(560, () => burst.destroy());
+    this.showAbilityStatus(control, message, color);
   }
 
   private bindHoldControl(
@@ -1578,10 +1749,11 @@ export class GameScene extends Phaser.Scene {
   // Game loop
   // ---------------------------------------------------------------------------
 
-  update(_time: number, delta: number): void {
+  update(time: number, delta: number): void {
     if (this.paused || this.gameOver) {
       return;
     }
+    this.updateBackgroundMotion(time);
     // Tweens own Daddy Pollo and both backgrounds during the cinematic.
     // Skipping regular gameplay prevents controls or collisions from
     // interrupting takeoff and landing.
@@ -1651,7 +1823,6 @@ export class GameScene extends Phaser.Scene {
     if (wantsToFire && !this.player.isCovering()) {
       this.tryFireWeapon();
     }
-    this.updateEquippedWeaponSprite();
 
     // Magnet power: pull good items toward the player.
     const magnetActive = this.isPowerActive('magnet');
@@ -2877,11 +3048,9 @@ export class GameScene extends Phaser.Scene {
       if (hadShield && this.isPowerActive('shield')) {
         this.player.showShield();
       }
-      this.equippedWeaponSprite?.setVisible(true);
       this.worldTransitioning = false;
       this.startWorldTimers();
       this.spawnWeaponPickup();
-      this.updateEquippedWeaponSprite();
     };
 
     try {
@@ -2894,7 +3063,6 @@ export class GameScene extends Phaser.Scene {
         .setAngle(0)
         .setAlpha(1)
         .setDepth(75);
-      this.equippedWeaponSprite?.setVisible(false);
 
       const previousTexture = this.textures.exists(previousWorld.backgroundKey)
         ? previousWorld.backgroundKey
@@ -3101,7 +3269,6 @@ export class GameScene extends Phaser.Scene {
                   if (hadShield && this.isPowerActive('shield')) {
                     this.player.showShield();
                   }
-                  this.equippedWeaponSprite?.setVisible(true);
                   flightLabel.setText('¡ATERRIZAJE COMPLETADO!');
                   this.tweens.add({
                     targets: overlay,
@@ -3441,9 +3608,7 @@ export class GameScene extends Phaser.Scene {
     // The modern blaster is already equipped, so the first falling weapon is
     // the historic cannon instead of a duplicate pickup.
     this.nextWeaponIndex = 1;
-    this.equippedWeaponSprite?.destroy();
-    this.equippedWeaponSprite = undefined;
-    this.player.setIntegratedBlaster(true);
+    this.player.setIntegratedBlaster(false);
     this.updateHud();
 
     const hint = this.add
@@ -3472,17 +3637,7 @@ export class GameScene extends Phaser.Scene {
     this.activeWeapon = weapon;
     this.weaponAmmo = definition.ammo;
     this.nextShotAt = this.time.now + 180;
-    this.equippedWeaponSprite?.destroy();
-    this.equippedWeaponSprite = undefined;
-    this.player.setIntegratedBlaster(weapon === 'modern');
-    if (!this.player.hasIntegratedBlaster()) {
-      const displaySize = weapon === 'poseidon' ? 72 : 62;
-      this.equippedWeaponSprite = this.add
-        .image(this.player.x + 36, this.player.y - 78, definition.textureKey)
-        .setDisplaySize(displaySize, displaySize)
-        .setOrigin(0.28, 0.72)
-        .setDepth(9);
-    }
+    this.player.setIntegratedBlaster(false);
 
     audioManager.play('power');
     this.emitSparkle(x, y, definition.color);
@@ -3865,10 +4020,8 @@ export class GameScene extends Phaser.Scene {
     }
     this.nextShotAt = this.time.now + weapon.cooldownMs;
 
-    const facing = this.player.getFacingDirection();
-    const integratedBlaster = this.player.hasIntegratedBlaster();
-    const muzzleX = this.player.x + (integratedBlaster ? 58 : 76) * facing;
-    const muzzleY = this.player.y - (integratedBlaster ? 94 : 99);
+    const muzzleX = this.player.x;
+    const muzzleY = this.player.y - 150;
     if (this.activeWeapon === 'poseidon') {
       this.spawnProjectile(muzzleX - 22, muzzleY + 4, this.activeWeapon, -105);
       this.spawnProjectile(muzzleX, muzzleY - 8, this.activeWeapon, 0);
@@ -3881,15 +4034,6 @@ export class GameScene extends Phaser.Scene {
     this.player.fireRecoil();
     audioManager.play(this.activeWeapon === 'historic' ? 'blast' : 'shot');
     this.emitMuzzleFlash(muzzleX, muzzleY, weapon.color);
-    if (this.equippedWeaponSprite) {
-      this.tweens.add({
-        targets: this.equippedWeaponSprite,
-        scaleX: this.equippedWeaponSprite.scaleX * 1.12,
-        scaleY: this.equippedWeaponSprite.scaleY * 0.9,
-        duration: 65,
-        yoyo: true,
-      });
-    }
     this.updateHud();
 
     if (this.weaponAmmo <= 0) {
@@ -4064,23 +4208,8 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     this.activeWeapon = null;
-    this.equippedWeaponSprite?.destroy();
-    this.equippedWeaponSprite = undefined;
     this.player.setIntegratedBlaster(false);
     this.updateHud();
-  }
-
-  private updateEquippedWeaponSprite(): void {
-    if (!this.equippedWeaponSprite || !this.activeWeapon) {
-      return;
-    }
-    const gait = Math.sin(this.time.now * 0.026);
-    const bob = Math.max(0, gait) * -4 + Math.sin(this.time.now * 0.009) * 1.2;
-    const facing = this.player.getFacingDirection();
-    this.equippedWeaponSprite
-      .setPosition(this.player.x + 34 * facing, this.player.y - 79 + bob)
-      .setFlipX(facing < 0)
-      .setAngle((this.activeWeapon === 'poseidon' ? -10 : -5) * facing);
   }
 
   // ---------------------------------------------------------------------------
@@ -4103,16 +4232,10 @@ export class GameScene extends Phaser.Scene {
     this.premiumWeaponActiveUntil = this.time.now + 15_000;
     this.nextShotAt = 0;
     const weapon = PREMIUM_WEAPONS[this.membership.selectedWeapon];
-    const weaponTexture: Record<PremiumWeaponId, string> = {
-      'plasma-neon': 'vip-tridente-plasma',
-      'misil-sabor': 'vip-misil-sabor',
-      'rayo-poseidon': 'vip-rayo-poseidon',
-    };
-    this.showMembershipAssetToast(
-      weaponTexture[this.membership.selectedWeapon],
-      weapon.name,
-      'BENEFICIO VIP ACTIVADO • 15 SEGUNDOS',
+    this.pulseAbilityControl(
+      this.premiumWeaponControl,
       weapon.color,
+      `${weapon.shortName} ACTIVA`,
     );
     this.showFloatingText(
       this.player.x,
@@ -4132,9 +4255,8 @@ export class GameScene extends Phaser.Scene {
     const weapon = WEAPONS[type];
     if (!fromFreshPress && this.time.now < this.nextShotAt) return;
     this.nextShotAt = this.time.now + weapon.cooldownMs;
-    const facing = this.player.getFacingDirection();
-    const muzzleX = this.player.x + 70 * facing;
-    const muzzleY = this.player.y - 102;
+    const muzzleX = this.player.x;
+    const muzzleY = this.player.y - 150;
     if (type === 'plasma-neon') {
       this.spawnProjectile(muzzleX - 24, muzzleY + 4, type, -135);
       this.spawnProjectile(muzzleX, muzzleY - 8, type, 0);
@@ -4181,11 +4303,10 @@ export class GameScene extends Phaser.Scene {
     plane.add([halo, aircraft, label]);
     plane.setScale(0.72);
     this.premiumPlane = plane;
-    this.showMembershipAssetToast(
-      'avion-daddy',
-      'AVIÓN DADDY',
-      'ATAQUE AÉREO ACTIVADO • 10 SEGUNDOS',
+    this.pulseAbilityControl(
+      this.premiumPlaneControl,
       0x43d9ff,
+      'ATAQUE AÉREO ACTIVO',
     );
     this.showFloatingText(this.player.x, this.player.y - 225, 'AVION • 10 SEGUNDOS', '#43d9ff');
     this.cameras.main.shake(160, 0.008);
@@ -4295,6 +4416,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.showElitePowerEffect(powerName, color, cycle);
+    this.pulseAbilityControl(this.elitePowerControl, color, powerName);
     this.updateMembershipControls();
     if (defeatedGeneral) {
       this.time.delayedCall(450, () => this.defeatGeneral());
@@ -4379,7 +4501,6 @@ export class GameScene extends Phaser.Scene {
     this.player.setCovering(false);
     this.combatBike.activate(this.player, expiresAt);
     this.nextCombatBikeShotAt = this.time.now + 180;
-    this.equippedWeaponSprite?.setVisible(false);
     this.showFloatingText(
       this.player.x,
       this.player.y - 230,
@@ -4406,7 +4527,6 @@ export class GameScene extends Phaser.Scene {
     const y = this.combatBike.y || this.player.y;
     this.activePowers.delete('combatBike');
     this.combatBike.deactivate(this.player, destroyed);
-    this.equippedWeaponSprite?.setVisible(Boolean(this.activeWeapon));
     if (destroyed) {
       this.nextEnemyDamageAt = this.time.now + 850;
       this.emitShockwave(x, y - 60, 165, 0xff4d2e);
@@ -4632,12 +4752,12 @@ export class GameScene extends Phaser.Scene {
     this.coverTouchPointers.clear();
     this.dragPointerId = null;
     this.pauseOverlay = undefined;
-    this.equippedWeaponSprite = undefined;
     this.premiumPlane = undefined;
     this.premiumWeaponControl = undefined;
     this.premiumPlaneControl = undefined;
     this.elitePowerControl = undefined;
     this.worldTransitionOverlay = undefined;
     this.worldTransitionTrail = undefined;
+    this.worldAmbience = undefined;
   }
 }
